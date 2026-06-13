@@ -1,0 +1,1492 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Scorpius - Sistema de Pedidos</title>
+    <meta name="apple-mobile-web-app-capable" content="true">
+    <meta name="apple-mobile-web-app-title" content="Scorpius">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { height: 100%; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+        }
+        
+        .login-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #003366 0%, #001a33 100%);
+        }
+        
+        .login-box {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            width: 90%;
+            max-width: 350px;
+        }
+        
+        .login-box h1 {
+            color: #003366;
+            margin-bottom: 24px;
+            font-size: 24px;
+        }
+        
+        .form-group {
+            margin-bottom: 16px;
+        }
+        
+        .form-group label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 6px;
+            font-size: 13px;
+        }
+        
+        .form-group input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        
+        .form-group input:focus {
+            outline: none;
+            border-color: #003366;
+            box-shadow: 0 0 0 3px rgba(0, 51, 102, 0.1);
+        }
+        
+        .btn {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            width: 100%;
+            background: #003366;
+            color: #FFD700;
+            transition: all 0.3s;
+        }
+        
+        .btn:hover { background: #001a33; }
+        
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 16px;
+            font-size: 13px;
+        }
+        
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 16px;
+            font-size: 13px;
+        }
+        
+        .app-container { 
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #003366 0%, #001a33 100%);
+            color: #FFD700;
+            padding: 16px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        }
+        
+        .header h1 { font-size: 20px; }
+        .header-right { text-align: right; font-size: 12px; }
+        .logout-btn { background: #FFD700; color: #003366; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: 600; font-size: 11px; margin-top: 8px; }
+        
+        .tabs-container {
+            background: white;
+            border-bottom: 2px solid #ddd;
+            overflow-x: auto;
+        }
+        
+        .tabs {
+            display: flex;
+            list-style: none;
+            padding: 0;
+        }
+        
+        .tab {
+            padding: 12px 14px;
+            cursor: pointer;
+            font-size: 12px;
+            border: none;
+            background: none;
+            color: #666;
+            border-bottom: 3px solid transparent;
+            white-space: nowrap;
+            transition: all 0.3s;
+        }
+        
+        .tab.active {
+            color: #003366;
+            border-bottom-color: #FFD700;
+            font-weight: 600;
+        }
+        
+        .main-content {
+            flex: 1;
+            overflow-y: auto;
+            padding-bottom: 20px;
+        }
+        
+        .container {
+            padding: 16px 12px;
+        }
+        
+        .content-section {
+            display: none;
+        }
+        
+        .content-section.active {
+            display: block;
+        }
+        
+        .card {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 16px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        .card h2 {
+            font-size: 16px;
+            color: #003366;
+            margin-bottom: 12px;
+            font-weight: 600;
+        }
+        
+        .form-group input, .form-group select, .form-group textarea {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            font-family: inherit;
+        }
+        
+        .form-group textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+        
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+        
+        @media (max-width: 480px) {
+            .grid-2 { grid-template-columns: 1fr; }
+        }
+        
+        .stat-card {
+            background: linear-gradient(135deg, #003366 0%, #001a33 100%);
+            color: #FFD700;
+            padding: 16px;
+            border-radius: 8px;
+            text-align: center;
+            margin-bottom: 12px;
+        }
+        
+        .stat-card .number { font-size: 28px; font-weight: 600; }
+        .stat-card .label { font-size: 12px; }
+        
+        .customer-item {
+            padding: 12px;
+            background: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            margin-bottom: 8px;
+            cursor: pointer;
+        }
+        
+        .customer-item:hover { background: #e8f4ff; border-color: #003366; }
+        .customer-item h3 { font-size: 13px; color: #003366; margin-bottom: 4px; font-weight: 600; }
+        .customer-item p { font-size: 11px; color: #666; margin: 2px 0; }
+        
+        .btn-small { padding: 6px 12px; font-size: 12px; width: auto; }
+        .btn-secondary { background: #f0f0f0; color: #333; border: 1px solid #ddd; }
+        .btn-secondary:hover { background: #e5e5e5; }
+        
+        .product-item {
+            padding: 12px;
+            background: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            margin-bottom: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .status-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            font-size: 13px;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        .order-status {
+            background: #f0f8ff;
+            padding: 12px;
+            border-radius: 6px;
+            border-left: 4px solid #003366;
+            margin-top: 12px;
+        }
+        
+        .empty-state { text-align: center; padding: 30px 20px; color: #999; font-size: 13px; }
+        
+        .loading { display: inline-block; width: 16px; height: 16px; border: 2px solid #f0f0f0; border-top: 2px solid #003366; border-radius: 50%; animation: spin 0.8s linear infinite; margin-right: 8px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        .pdf-hidden { display: none; }
+    </style>
+    <style>
+        /* ===== CAMADA DE DESIGN REFINADO (V10) ===== */
+        :root {
+            --navy: #0b2a4a;
+            --navy-deep: #07223c;
+            --gold: #f5c518;
+            --ink: #1f2a37;
+            --muted: #6b7280;
+            --line: #e6e9ef;
+            --bg: #eef1f6;
+        }
+        body {
+            background: radial-gradient(1200px 600px at 50% -10%, #f7f9fc 0%, var(--bg) 55%) fixed;
+            color: var(--ink);
+            -webkit-font-smoothing: antialiased;
+        }
+        .login-container {
+            background:
+                radial-gradient(900px 500px at 80% -20%, #14375f 0%, transparent 60%),
+                linear-gradient(160deg, var(--navy) 0%, var(--navy-deep) 100%);
+        }
+        .login-box {
+            border-radius: 20px; padding: 36px 30px;
+            box-shadow: 0 24px 60px rgba(7,34,60,.45);
+            border: 1px solid rgba(255,255,255,.6);
+        }
+        .login-box h1 { text-align: center; font-size: 26px; letter-spacing: -.3px; margin-bottom: 6px; }
+        .login-box::before {
+            content: "S"; display: flex; align-items: center; justify-content: center;
+            width: 58px; height: 58px; margin: 0 auto 14px;
+            background: linear-gradient(145deg, var(--navy), var(--navy-deep));
+            color: var(--gold); font-weight: 800; font-size: 30px; border-radius: 16px;
+            box-shadow: 0 8px 20px rgba(11,42,74,.35);
+        }
+        .header {
+            background: linear-gradient(135deg, var(--navy) 0%, var(--navy-deep) 100%);
+            border-bottom: 3px solid var(--gold); padding: 14px 20px;
+        }
+        .header h1 { font-size: 19px; letter-spacing: -.2px; display: flex; align-items: center; gap: 9px; }
+        .header h1::before {
+            content: "S"; display: inline-flex; align-items: center; justify-content: center;
+            width: 30px; height: 30px; border-radius: 9px;
+            background: var(--gold); color: var(--navy-deep); font-weight: 800; font-size: 17px;
+        }
+        .logout-btn { border-radius: 8px; transition: transform .15s, box-shadow .15s; }
+        .logout-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 14px rgba(245,197,24,.4); }
+        .tab { font-size: 12.5px; padding: 14px 16px; transition: color .2s, border-color .2s; }
+        .tab:hover { color: var(--navy); }
+        .tab.active { color: var(--navy); border-bottom-color: var(--gold); }
+        .card {
+            border: 1px solid var(--line); border-radius: 14px; padding: 18px;
+            box-shadow: 0 2px 10px rgba(16,32,56,.05); transition: box-shadow .2s;
+        }
+        .card:hover { box-shadow: 0 6px 22px rgba(16,32,56,.08); }
+        .card h2 {
+            font-size: 14px; text-transform: uppercase; letter-spacing: .5px;
+            color: var(--navy); display: flex; align-items: center; gap: 7px;
+        }
+        .form-group label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
+        .form-group input, .form-group select, .form-group textarea {
+            border: 1px solid var(--line); border-radius: 10px; padding: 11px 13px;
+            transition: border-color .15s, box-shadow .15s; background: #fcfdff;
+        }
+        .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+            outline: none; border-color: var(--navy);
+            box-shadow: 0 0 0 3px rgba(11,42,74,.12); background: #fff;
+        }
+        .btn {
+            background: linear-gradient(135deg, var(--navy) 0%, var(--navy-deep) 100%);
+            color: var(--gold); border-radius: 10px; letter-spacing: .2px;
+            transition: transform .15s, box-shadow .2s, filter .2s;
+        }
+        .btn:hover { filter: brightness(1.1); transform: translateY(-1px); box-shadow: 0 8px 18px rgba(11,42,74,.28); }
+        .btn-secondary { background: #fff; color: var(--navy); border: 1px solid var(--line); }
+        .btn-secondary:hover { background: #f7f9fc; filter: none; color: var(--navy); }
+        .stat-card {
+            background: linear-gradient(145deg, var(--navy) 0%, var(--navy-deep) 100%);
+            border-radius: 14px; padding: 18px; position: relative; overflow: hidden;
+            box-shadow: 0 8px 22px rgba(11,42,74,.22);
+        }
+        .stat-card::after {
+            content: ""; position: absolute; right: -20px; top: -20px;
+            width: 80px; height: 80px; border-radius: 50%;
+            background: radial-gradient(circle, rgba(245,197,24,.25), transparent 70%);
+        }
+        .stat-card .number { font-size: 32px; font-weight: 800; letter-spacing: -1px; }
+        .stat-card .label { font-size: 11px; text-transform: uppercase; letter-spacing: .6px; opacity: .9; }
+        .customer-item, .product-item { border-radius: 11px; transition: background .15s, border-color .15s, transform .15s; }
+        .customer-item:hover { transform: translateX(2px); }
+        .tabs-container::-webkit-scrollbar { height: 0; }
+    </style>
+</head>
+<body>
+    <!-- LOGIN -->
+    <div id="loginScreen" class="login-container">
+        <div class="login-box">
+            <h1>📦 Scorpius</h1>
+            <div id="loginError"></div>
+            <div class="form-group">
+                <label>Usuário</label>
+                <input type="text" id="loginUser" placeholder="admin, bruno, joao, edson...">
+            </div>
+            <div class="form-group">
+                <label>Senha</label>
+                <input type="password" id="loginPassword" placeholder="sua senha">
+            </div>
+            <button class="btn" onclick="login()">Entrar</button>
+        </div>
+    </div>
+
+    <!-- APP -->
+    <div id="appScreen" class="app-container" style="display: none;">
+        <div class="header">
+            <div><h1>📦 Scorpius</h1></div>
+            <div class="header-right">
+                <p id="currentUser"></p>
+                <button class="logout-btn" onclick="logout()">Sair</button>
+            </div>
+        </div>
+        
+        <div class="tabs-container">
+            <ul class="tabs">
+                <li><button class="tab active" onclick="switchTab('dashboard', this)">📊 Dashboard</button></li>
+                <li><button class="tab" onclick="switchTab('pedido', this)">➕ Pedido / Orçamento</button></li>
+                <li><button class="tab" onclick="switchTab('clientes', this)">👥 Clientes</button></li>
+                <li><button class="tab" onclick="switchTab('historico', this)">📈 Histórico</button></li>
+                <li><button class="tab" onclick="switchTab('admin', this)" id="adminTab">⚙️ Admin</button></li>
+            </ul>
+        </div>
+        
+        <div class="main-content">
+            <div class="container">
+                <!-- DASHBOARD -->
+                <div id="dashboard" class="content-section active">
+                    <div class="card">
+                        <h2>📊 Dashboard</h2>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                            <div class="stat-card">
+                                <div class="number" id="totalPedidos">0</div>
+                                <div class="label">Pedidos Totais</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="number" id="pendentes">0</div>
+                                <div class="label">A Retirar</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card">
+                        <h2>📋 Pedidos por Vencimento</h2>
+                        <div id="ultimosPedidos"></div>
+                    </div>
+                </div>
+                
+                <!-- DETALHE DO PEDIDO (tela cheia, amigável p/ celular) -->
+                <div id="orderDetail" class="content-section">
+                    <button class="btn btn-secondary btn-small" style="margin-bottom:14px;" onclick="voltarDashboard()">← Voltar</button>
+                    <div id="orderDetailContent"></div>
+                </div>
+
+                <!-- NOVO PEDIDO -->
+                <div id="pedido" class="content-section">
+                    <div id="alertPedido"></div>
+                    <div class="card">
+                        <h2>🔍 Buscar Cliente</h2>
+                        <div class="form-group">
+                            <label>Buscar por Nome, Telefone ou Endereço</label>
+                            <input type="text" id="searchClient" placeholder="Nome, telefone ou endereço..." oninput="searchClients(this.value)">
+                            <div id="searchResults" style="margin-top: 10px;"></div>
+                        </div>
+                        <p id="selectedClientName" style="font-size: 14px; color: #003366; font-weight: 600;">Nenhum cliente selecionado</p>
+                    </div>
+                    
+                    <div class="card"><h2>📦 Produtos</h2>
+                        <button id="refreshProdBtn" class="btn btn-secondary btn-small" style="width:100%; margin-bottom:10px;" onclick="refreshProdutos()">🔄 Atualizar produtos do Sheets</button>
+                        <div id="productsList"></div>
+                    </div>
+                    
+                    <div class="card"><h2>🛒 Carrinho</h2><div id="cartItems"><div class="empty-state">Nenhum produto</div></div></div>
+                    
+                    <div class="card">
+                        <h2>💰 Totais</h2>
+                        <div class="grid-2">
+                            <div class="form-group"><label>Frete (R$)</label><input type="number" id="freight" placeholder="0.00" step="0.01" min="0" oninput="updateCartTotal()"></div>
+                            <div class="form-group"><label>Desconto (R$)</label><input type="number" id="discount" placeholder="0.00" step="0.01" min="0" oninput="updateCartTotal()"></div>
+                        </div>
+                        <div id="cartTotalSection"></div>
+                    </div>
+                    
+                    <div class="card">
+                        <h2>📍 Entrega</h2>
+                        <div id="alertEntrega"></div>
+                        <button class="btn btn-secondary btn-small" style="width:100%; margin-bottom:12px;" onclick="copiarEnderecoCadastro()">📋 Copiar endereço do cadastro do cliente</button>
+                        <div class="form-group"><label>Rua e Número</label><input type="text" id="rentalRua" placeholder="Rua, número, complemento"></div>
+                        <div class="grid-2">
+                            <div class="form-group"><label>CEP</label><input type="text" id="rentalCEP" placeholder="00000-000"></div>
+                            <div class="form-group"><label>Bairro</label><input type="text" id="rentalBairro" placeholder="Bairro"></div>
+                        </div>
+                        <div class="form-group"><label>Cidade</label><input type="text" id="rentalCidade" placeholder="São Paulo"></div>
+
+                        <div class="form-group" style="margin-bottom:8px;">
+                            <label>Período (preenche a devolução automaticamente)</label>
+                            <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px;">
+                                <button type="button" class="btn btn-secondary btn-small" style="width:100%;" onclick="aplicarPeriodo(7)">Semanal</button>
+                                <button type="button" class="btn btn-secondary btn-small" style="width:100%;" onclick="aplicarPeriodo(15)">Quinzenal</button>
+                                <button type="button" class="btn btn-secondary btn-small" style="width:100%;" onclick="aplicarPeriodo(30)">Mensal</button>
+                            </div>
+                        </div>
+                        <div class="grid-2">
+                            <div class="form-group"><label>Data Início (retirada)</label><input type="date" id="startDate" onchange="reaplicarPeriodo()"></div>
+                            <div class="form-group"><label>Data Devolução</label><input type="date" id="endDate"></div>
+                        </div>
+                        <div class="form-group"><label>Observações</label><textarea id="orderNotes" placeholder="..."></textarea></div>
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                            <button class="btn btn-secondary btn-small" style="width:100%;" onclick="createOrcamento()">🧾 Gerar Orçamento</button>
+                            <button class="btn btn-small" style="width:100%;" onclick="createOrder()">✓ Criar Pedido</button>
+                        </div>
+                    </div>
+
+                    <div id="waBlock" class="card" style="display:none;">
+                        <h2>💬 Texto para WhatsApp</h2>
+                        <p style="font-size:11px;color:#6b7280;margin-bottom:8px;">Texto de apoio caso queira enviar sem o PDF. É só copiar e colar.</p>
+                        <textarea id="waText" style="width:100%;min-height:200px;font-family:monospace;font-size:12px;" readonly></textarea>
+                        <button id="waCopyBtn" class="btn btn-small" style="width:100%; margin-top:8px;" onclick="copiarWhatsApp()">📋 Copiar texto</button>
+                    </div>
+                </div>
+
+                <!-- CLIENTES -->
+                <div id="clientes" class="content-section">
+                    <div class="card">
+                        <h2>👥 Gerenciar Clientes</h2>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px;">
+                            <button class="btn btn-secondary btn-small" style="width: 100%;" onclick="loadClientsFromSheets()">📊 Carregar do Sheets</button>
+                            <button class="btn btn-secondary btn-small" style="width: 100%;" onclick="importClientesFromJSON()">📁 Importar JSON</button>
+                        </div>
+                        <button class="btn btn-secondary btn-small" style="margin-bottom: 12px; width: 100%;" onclick="toggleNewClientForm()">+ Novo Cliente</button>
+                        <div id="newClientForm" style="display: none; background: #f9f9f9; padding: 12px; border-radius: 6px; margin-bottom: 12px;">
+                            <p style="font-size:11px;color:#6b7280;margin-bottom:10px;">Campos com <span style="color:#dc2626;">*</span> são obrigatórios</p>
+                            <div id="newClientError"></div>
+                            <div class="form-group"><label>Nome <span style="color:#dc2626;">*</span></label><input type="text" id="newClientName" placeholder="Nome completo"></div>
+                            <div class="grid-2">
+                                <div class="form-group"><label>Telefone <span style="color:#dc2626;">*</span></label><input type="tel" id="newClientPhone" placeholder="(11) 99999-9999"></div>
+                                <div class="form-group"><label>Email (opcional)</label><input type="email" id="newClientEmail" placeholder="email@example.com"></div>
+                            </div>
+                            <div class="grid-2">
+                                <div class="form-group"><label>CPF <span style="color:#dc2626;">*</span></label><input type="text" id="newClientCPF" placeholder="123.456.789-00"></div>
+                                <div class="form-group"><label>Data de Nascimento (opcional)</label><input type="date" id="newClientNasc"></div>
+                            </div>
+                            <div class="form-group"><label>Rua e Número <span style="color:#dc2626;">*</span></label><input type="text" id="newClientRua" placeholder="Rua, número"></div>
+                            <div class="grid-2">
+                                <div class="form-group"><label>CEP <span style="color:#dc2626;">*</span></label><input type="text" id="newClientCep" placeholder="00000-000"></div>
+                                <div class="form-group"><label>Bairro <span style="color:#dc2626;">*</span></label><input type="text" id="newClientBairro" placeholder="Bairro"></div>
+                            </div>
+                            <div class="form-group"><label>Cidade <span style="color:#dc2626;">*</span></label><input type="text" id="newClientCidade" placeholder="São Paulo"></div>
+                            <div class="form-group"><label>Comentários (opcional)</label><textarea id="newClientComentarios" placeholder="Observações sobre o cliente, histórico, preferências..."></textarea></div>
+                            <button class="btn btn-small" style="width: auto;" onclick="addNewClient()">Adicionar Cliente</button>
+                        </div>
+                        <div class="form-group"><label>🔍 Buscar</label><input type="text" id="searchClientList" placeholder="Nome, telefone ou endereço..." oninput="filterClientsList(this.value)"></div>
+                        <div id="clientsList"></div>
+                    </div>
+                </div>
+
+                <!-- HISTÓRICO -->
+                <div id="historico" class="content-section">
+                    <div class="card">
+                        <h2>📈 Histórico de Pedidos</h2>
+                        <div id="historicoList"></div>
+                    </div>
+                </div>
+
+                <!-- ADMIN -->
+                <div id="admin" class="content-section">
+                    <div class="card" style="background: #fff3cd; border: 2px solid #ffc107;">
+                        <h3 style="color: #856404; margin-bottom: 12px;">⚙️ Painel de Administração</h3>
+                        <h4 style="font-size: 13px; margin-bottom: 8px; color: #003366; font-weight: 600;">Usuários</h4>
+                        <div id="usersList" style="margin-bottom: 16px;"></div>
+                        
+                        <div style="border-top: 1px solid #ddd; padding-top: 16px;">
+                            <h4 style="font-size: 13px; margin-bottom: 8px; color: #003366; font-weight: 600;">Novo Usuário</h4>
+                            <div class="form-group"><label>Usuário</label><input type="text" id="newUserName" placeholder="bruno, joao, edson..."></div>
+                            <div class="form-group"><label>Senha</label><input type="password" id="newUserPassword" placeholder="Digite a senha"></div>
+                            <div class="form-group"><label><input type="checkbox" id="newUserIsAdmin"> É Admin?</label></div>
+                            <button class="btn btn-small" style="width: auto;" onclick="addNewUser()">Adicionar Usuário</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let users = [
+            {id: 1, name: 'admin', password: 'admin123', isAdmin: true},
+            {id: 2, name: 'bruno', password: 'bruno123', isAdmin: false},
+            {id: 3, name: 'joao', password: 'joao123', isAdmin: false},
+            {id: 4, name: 'edson', password: 'edson123', isAdmin: false},
+        ];
+        
+        let currentUser = null;
+        let mockClientes = [];
+        let mockProducts = [
+            {id: 1, name: 'Andaime Tubular 1.20m', price: 50},
+            {id: 2, name: 'Andaime Tubular 1.80m', price: 65},
+            {id: 3, name: 'Plataforma 1.20x1.20m', price: 120},
+            {id: 4, name: 'Proteção de Queda', price: 30},
+            {id: 5, name: 'Escada 5 degraus', price: 45}
+        ];
+        let selectedClient = null;
+        let cartItems = [];
+        let orders = [];
+        let orcamentos = [];
+
+        const SHEETS_URL = 'https://script.google.com/macros/s/AKfycbz4ifhvzmeVUAWxaHGQvGAeTiFZvr_wTAvsfsGPQ1AhRZvy9X3Jtm2rVFXbMq-n2gJh/exec';
+
+        // ===== HELPERS DE VALIDAÇÃO =====
+        function validarCEP(cep) {
+            const limpo = (cep || '').replace(/\D/g, '');
+            return limpo.length === 8;
+        }
+        function formatarCEP(cep) {
+            const limpo = (cep || '').replace(/\D/g, '');
+            return limpo.length === 8 ? limpo.slice(0,5) + '-' + limpo.slice(5) : cep;
+        }
+        function dataValida(str) {
+            if (!str) return false;
+            const d = new Date(str);
+            return !isNaN(d.getTime());
+        }
+        function dataNoPassado(str) {
+            const d = new Date(str + 'T00:00:00');
+            const hoje = new Date(); hoje.setHours(0,0,0,0);
+            return d < hoje;
+        }
+        function statusLabel(s) {
+            const map = { 'a_retirar': '🟡 A Retirar', 'retirado': '🔵 Retirado', 'devolvido': '🟢 Devolvido', 'orcamento': '📄 Orçamento' };
+            return map[s] || s;
+        }
+        function statusColor(s) {
+            const map = { 'a_retirar': '#f5b400', 'retirado': '#2563eb', 'devolvido': '#16a34a', 'orcamento': '#8b95a3' };
+            return map[s] || '#999';
+        }
+        function fmt(v) { return 'R$ ' + Number(v || 0).toFixed(2).replace('.', ','); }
+        function dataBR(s) { return s ? new Date(s + 'T00:00:00').toLocaleDateString('pt-BR') : '—'; }
+        function diasEntre(a, b) {
+            const d = Math.ceil((new Date(b) - new Date(a)) / (1000 * 60 * 60 * 24));
+            return isNaN(d) || d < 1 ? 1 : d;
+        }
+
+        // ===== SINCRONIZAÇÃO COM GOOGLE SHEETS =====
+        // Envia sem header Content-Type (evita preflight CORS que o Apps Script não responde)
+        function syncToSheets(action, payload) {
+            return fetch(SHEETS_URL, {
+                method: 'POST',
+                body: JSON.stringify(Object.assign({ action }, payload))
+            }).then(r => r.json());
+        }
+        
+        function init() {
+            const c = localStorage.getItem('scorpius_clientes');
+            if (c) mockClientes = JSON.parse(c);
+            const o = localStorage.getItem('scorpius_orders');
+            if (o) orders = JSON.parse(o);
+            const orc = localStorage.getItem('scorpius_orcamentos');
+            if (orc) orcamentos = JSON.parse(orc);
+            const p = localStorage.getItem('scorpius_produtos');
+            if (p) mockProducts = JSON.parse(p);
+            const u = localStorage.getItem('scorpius_users');
+            if (u) users = JSON.parse(u);
+            renderClientsList();
+            renderProductsList();
+            updateDashboard();
+        }
+        
+        function save() {
+            localStorage.setItem('scorpius_clientes', JSON.stringify(mockClientes));
+            localStorage.setItem('scorpius_orders', JSON.stringify(orders));
+            localStorage.setItem('scorpius_orcamentos', JSON.stringify(orcamentos));
+            localStorage.setItem('scorpius_produtos', JSON.stringify(mockProducts));
+            localStorage.setItem('scorpius_users', JSON.stringify(users));
+        }
+        
+        function login() {
+            const user = document.getElementById('loginUser').value.trim();
+            const pwd = document.getElementById('loginPassword').value;
+            const found = users.find(u => u.name === user && u.password === pwd);
+            
+            if (!found) {
+                document.getElementById('loginError').innerHTML = '<div class="alert-error">❌ Usuário ou senha incorretos</div>';
+                return;
+            }
+            
+            currentUser = found;
+            init();
+            document.getElementById('loginScreen').style.display = 'none';
+            document.getElementById('appScreen').style.display = 'flex';
+            document.getElementById('currentUser').textContent = '👤 ' + currentUser.name.toUpperCase() + (currentUser.isAdmin ? ' (Admin)' : '');
+            document.getElementById('adminTab').style.display = currentUser.isAdmin ? 'block' : 'none';
+            if (currentUser.isAdmin) renderAdminPanel();
+        }
+        
+        function logout() {
+            if (confirm('Sair?')) {
+                currentUser = null;
+                document.getElementById('loginScreen').style.display = 'flex';
+                document.getElementById('appScreen').style.display = 'none';
+            }
+        }
+        
+        function switchTab(tab, btn) {
+            document.querySelectorAll('.content-section').forEach(e => e.classList.remove('active'));
+            document.querySelectorAll('.tab').forEach(e => e.classList.remove('active'));
+            document.getElementById(tab).classList.add('active');
+            btn.classList.add('active');
+            if (tab === 'dashboard') updateDashboard();
+            if (tab === 'historico') renderHistorico();
+        }
+        
+        function renderAdminPanel() {
+            let html = users.map(u => `
+                <div style="background: white; padding: 12px; border: 1px solid #ddd; border-radius: 6px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
+                    <div><p style="font-size: 12px; color: #666;"><strong>${u.name}</strong></p><p style="font-size: 12px; color: #666;">Senha: ${u.password} ${u.isAdmin ? '(Admin)' : ''}</p></div>
+                    <div style="display: flex; gap: 6px;">
+                        <button class="btn btn-secondary btn-small" onclick="editUserPassword(${u.id}, '${u.name}')">🔐 Alterar</button>
+                        <button class="btn btn-secondary btn-small" onclick="removeUser(${u.id})">🗑️</button>
+                    </div>
+                </div>
+            `).join('');
+            document.getElementById('usersList').innerHTML = html;
+        }
+        
+        function editUserPassword(userId, userName) {
+            const newPwd = prompt(`Nova senha para ${userName}:`, '');
+            if (newPwd === null) return;
+            if (newPwd.trim().length < 3) { alert('Senha deve ter pelo menos 3 caracteres'); return; }
+            const user = users.find(u => u.id === userId);
+            if (user) {
+                user.password = newPwd;
+                save();
+                renderAdminPanel();
+                alert('✓ Senha alterada com sucesso!');
+            }
+        }
+        
+        function addNewUser() {
+            const name = document.getElementById('newUserName').value.trim();
+            const pwd = document.getElementById('newUserPassword').value;
+            const isAdmin = document.getElementById('newUserIsAdmin').checked;
+            if (!name || !pwd) { alert('Preencha usuário e senha'); return; }
+            if (users.find(u => u.name === name)) { alert('Usuário já existe'); return; }
+            users.push({ id: Date.now(), name, password: pwd, isAdmin });
+            save();
+            renderAdminPanel();
+            document.getElementById('newUserName').value = '';
+            document.getElementById('newUserPassword').value = '';
+            document.getElementById('newUserIsAdmin').checked = false;
+            alert('✓ Usuário adicionado');
+        }
+        
+        function removeUser(id) {
+            if (id === currentUser.id) { alert('Não pode remover seu usuário'); return; }
+            if (confirm('Tem certeza?')) {
+                users = users.filter(u => u.id !== id);
+                save();
+                renderAdminPanel();
+            }
+        }
+        
+        function searchClients(term) {
+            const res = mockClientes.filter(c => {
+                const st = term.toLowerCase();
+                return c.name.toLowerCase().includes(st) || (c.phone && c.phone.includes(st)) || c.endereco.toLowerCase().includes(st);
+            });
+            let html = res.length > 0 ? res.map(c => `
+                <div class="customer-item" onclick="selectClient(${c.id}, '${c.name}')">
+                    <h3>${c.name}</h3>
+                    <p>📞 ${c.phone || 'N/A'}</p>
+                    <p>📍 ${c.endereco || 'N/A'}</p>
+                </div>
+            `).join('') : (term ? '<p style="font-size: 12px; color: #999;">Não encontrado</p>' : '');
+            document.getElementById('searchResults').innerHTML = html;
+        }
+        
+        function selectClient(id, name) {
+            selectedClient = mockClientes.find(c => c.id === id);
+            document.getElementById('selectedClientName').textContent = name + ' ✓';
+            document.getElementById('searchClient').value = '';
+            document.getElementById('searchResults').innerHTML = '';
+        }
+        
+        function filterClientsList(term) {
+            const res = mockClientes.filter(c => c.name.toLowerCase().includes(term.toLowerCase()) || (c.phone && c.phone.includes(term)) || c.endereco.toLowerCase().includes(term));
+            renderClientsFiltered(res.length > 0 ? res : mockClientes);
+        }
+        
+        function renderClientsList() {
+            renderClientsFiltered(mockClientes);
+        }
+        
+        function renderClientsFiltered(clients) {
+            let html = clients.map(c => `
+                <div class="card" style="background: #f9f9f9; border-left: 4px solid #003366;">
+                    <h3 style="color: #003366; font-size: 14px; margin-bottom: 8px;">${c.name}</h3>
+                    <p style="font-size: 12px; color: #666; margin: 4px 0;">📞 ${c.phone || 'N/A'}</p>
+                    <p style="font-size: 12px; color: #666; margin: 4px 0;">🆔 CPF: ${c.cpf || 'N/A'}</p>
+                    <p style="font-size: 12px; color: #666; margin: 4px 0;">📍 ${c.endereco || 'N/A'}</p>
+                    <p style="font-size: 12px; color: #666; margin: 4px 0;">📮 CEP: ${c.cep || 'N/A'}</p>
+                </div>
+            `).join('');
+            document.getElementById('clientsList').innerHTML = html || '<div class="empty-state">Nenhum cliente adicionado</div>';
+        }
+        
+        function toggleNewClientForm() {
+            const form = document.getElementById('newClientForm');
+            form.style.display = form.style.display === 'none' ? 'block' : 'none';
+        }
+        
+        function importClientesFromJSON() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.json,.csv';
+            input.onchange = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    try {
+                        let data = JSON.parse(event.target.result);
+                        if (!Array.isArray(data)) {
+                            alert('Formato inválido. Use JSON com array de clientes.');
+                            return;
+                        }
+                        const imported = data.map(c => ({
+                            id: c.id || Date.now() + Math.random(),
+                            name: c.name || c.Nome_Limpo || '',
+                            phone: c.phone || c.Telefone || '',
+                            email: c.email || c.Email || '',
+                            cpf: c.cpf || c.CPF || '',
+                            cep: c.cep || c.CEP || c.cep || '',
+                            endereco: c.endereco || c.Endereco || '',
+                            company: c.company || ''
+                        }));
+                        mockClientes = [...mockClientes, ...imported];
+                        save();
+                        renderClientsList();
+                        alert(`✓ ${imported.length} clientes importados!`);
+                    } catch (err) {
+                        alert('Erro ao importar: ' + err.message);
+                    }
+                };
+                reader.readAsText(file);
+            };
+            input.click();
+        }
+        
+        function loadClientsFromSheets() {
+            const url = 'https://script.google.com/macros/s/AKfycbz4ifhvzmeVUAWxaHGQvGAeTiFZvr_wTAvsfsGPQ1AhRZvy9X3Jtm2rVFXbMq-n2gJh/exec';
+            fetch(url, {
+                method: 'POST',
+                body: JSON.stringify({ action: 'getClientes' })
+            })
+            .then(r => r.json())
+            .then(res => {
+                if (res.success && res.data) {
+                    mockClientes = res.data;
+                    save();
+                    renderClientsList();
+                    alert(`✓ ${res.data.length} clientes carregados do Sheets!`);
+                } else {
+                    alert('❌ Erro ao carregar: ' + (res.error || 'Desconhecido'));
+                }
+            })
+            .catch(e => {
+                alert('❌ Erro de conexão com Sheets. Tente importar JSON.');
+            });
+        }
+        
+        function addNewClient() {
+            const name = document.getElementById('newClientName').value.trim();
+            const phone = document.getElementById('newClientPhone').value.trim();
+            const email = document.getElementById('newClientEmail').value.trim();
+            const cpf = document.getElementById('newClientCPF').value.trim();
+            const nasc = document.getElementById('newClientNasc').value;
+            const rua = document.getElementById('newClientRua').value.trim();
+            const cep = document.getElementById('newClientCep').value.trim();
+            const bairro = document.getElementById('newClientBairro').value.trim();
+            const cidade = document.getElementById('newClientCidade').value.trim();
+            const comentarios = document.getElementById('newClientComentarios').value.trim();
+            const errBox = document.getElementById('newClientError');
+            errBox.innerHTML = '';
+
+            // Validação de obrigatórios (email é opcional)
+            const faltando = [];
+            if (!name) faltando.push('Nome');
+            if (!phone) faltando.push('Telefone');
+            if (!cpf) faltando.push('CPF');
+            if (!rua) faltando.push('Rua');
+            if (!cep) faltando.push('CEP');
+            if (!bairro) faltando.push('Bairro');
+            if (!cidade) faltando.push('Cidade');
+            if (faltando.length) {
+                errBox.innerHTML = '<div class="alert-error">⚠️ Preencha: ' + faltando.join(', ') + '</div>';
+                return;
+            }
+            if (!validarCEP(cep)) {
+                errBox.innerHTML = '<div class="alert-error">⚠️ CEP inválido. Use o formato 00000-000 (8 dígitos).</div>';
+                return;
+            }
+            if (nasc && dataNoPassado(nasc) === false) {
+                errBox.innerHTML = '<div class="alert-error">⚠️ Data de nascimento não pode ser hoje ou no futuro.</div>';
+                return;
+            }
+
+            const endereco = [rua, bairro, cidade].filter(x => x).join(', ');
+            const novo = {
+                id: Date.now(),
+                name, phone, email, cpf,
+                nascimento: nasc || '',
+                cep: formatarCEP(cep),
+                rua, bairro, cidade,
+                endereco,
+                comentarios,
+                company: ''
+            };
+            mockClientes.push(novo);
+            save();
+            renderClientsList();
+
+            // Tenta subir pro Sheets
+            syncToSheets('addCliente', { cliente: novo })
+                .then(res => {
+                    if (res && res.success) alert('✓ Cliente adicionado e enviado ao Sheets!');
+                    else alert('✓ Cliente salvo localmente. (Sheets: ' + ((res && res.error) || 'sem confirmação') + ')');
+                })
+                .catch(() => alert('✓ Cliente salvo localmente. ⚠️ Não consegui enviar ao Sheets agora.'));
+
+            document.getElementById('newClientForm').style.display = 'none';
+            ['newClientName','newClientPhone','newClientEmail','newClientCPF','newClientNasc','newClientRua','newClientCep','newClientBairro','newClientCidade','newClientComentarios'].forEach(id => document.getElementById(id).value = '');
+        }
+        
+        // ===== ENTREGA: copiar endereço e atalhos de período =====
+        function copiarEnderecoCadastro() {
+            if (!selectedClient) { alert('Selecione um cliente primeiro (na busca acima).'); return; }
+            document.getElementById('rentalRua').value = selectedClient.rua || selectedClient.endereco || '';
+            document.getElementById('rentalCEP').value = selectedClient.cep || '';
+            document.getElementById('rentalBairro').value = selectedClient.bairro || '';
+            document.getElementById('rentalCidade').value = selectedClient.cidade || '';
+            document.getElementById('alertEntrega').innerHTML = '<div class="alert-success">✓ Endereço copiado do cadastro. Edite se precisar.</div>';
+            setTimeout(() => { document.getElementById('alertEntrega').innerHTML = ''; }, 3000);
+        }
+
+        let periodoAtivo = null; // guarda quantos dias pra reaplicar se mudar a data início
+        function aplicarPeriodo(dias) {
+            const ini = document.getElementById('startDate').value;
+            if (!ini) {
+                document.getElementById('alertEntrega').innerHTML = '<div class="alert-error">⚠️ Preencha a Data de Início (retirada) primeiro.</div>';
+                return;
+            }
+            periodoAtivo = dias;
+            const d = new Date(ini + 'T00:00:00');
+            d.setDate(d.getDate() + dias);
+            document.getElementById('endDate').value = d.toISOString().slice(0, 10);
+            document.getElementById('alertEntrega').innerHTML = '';
+        }
+        function reaplicarPeriodo() {
+            // se o usuário escolheu um período e mudou a data início, recalcula a devolução a partir da nova data início
+            if (periodoAtivo) aplicarPeriodo(periodoAtivo);
+        }
+
+        function refreshProdutos() {
+            const btn = document.getElementById('refreshProdBtn');
+            if (btn) { btn.textContent = '⏳ Atualizando...'; btn.disabled = true; }
+            syncToSheets('getProdutos', {})
+                .then(res => {
+                    if (res && res.success && Array.isArray(res.data) && res.data.length) {
+                        mockProducts = res.data.map((p, i) => ({
+                            id: p.id || (i + 1),
+                            name: p.name || p.nome || '',
+                            price: Number(p.price || p.preco || 0)
+                        })).filter(p => p.name);
+                        save();
+                        renderProductsList();
+                        alert('✓ ' + mockProducts.length + ' produtos atualizados do Sheets!');
+                    } else {
+                        alert('⚠️ Nenhum produto retornado. Verifique a aba "produtos" e se o Apps Script v4 está publicado.');
+                    }
+                })
+                .catch(() => alert('❌ Não consegui conectar ao Sheets para atualizar produtos.'))
+                .finally(() => { if (btn) { btn.textContent = '🔄 Atualizar produtos do Sheets'; btn.disabled = false; } });
+        }
+
+        function renderProductsList() {
+            document.getElementById('productsList').innerHTML = mockProducts.map(p => `
+                <div class="product-item">
+                    <div><h3 style="font-size: 14px;">${p.name}</h3><p style="font-size: 12px; color: #666;">R$ ${p.price.toFixed(2)}</p></div>
+                    <button class="btn btn-secondary btn-small" onclick="addToCart(${p.id}, '${p.name}', ${p.price})">+</button>
+                </div>
+            `).join('');
+        }
+        
+        function addToCart(pid, name, price) {
+            let i = cartItems.find(x => x.productId === pid);
+            if (i) i.qty++; else cartItems.push({productId: pid, name, price, qty: 1});
+            renderCart();
+        }
+        
+        function renderCart() {
+            if (cartItems.length === 0) { document.getElementById('cartItems').innerHTML = '<div class="empty-state">Nenhum produto</div>'; updateCartTotal(); return; }
+            document.getElementById('cartItems').innerHTML = cartItems.map((i, idx) => `
+                <div class="status-item">
+                    <div><strong>${i.name}</strong><p style="font-size: 11px; color: #666;">R$ ${i.price.toFixed(2)} × ${i.qty}</p></div>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <span>R$ ${(i.price * i.qty).toFixed(2)}</span>
+                        <input type="number" value="${i.qty}" onchange="updateQty(${idx}, this.value)" style="width: 50px; padding: 6px; font-size: 12px;">
+                        <button class="btn btn-secondary btn-small" onclick="removeFromCart(${idx})">✕</button>
+                    </div>
+                </div>
+            `).join('');
+            updateCartTotal();
+        }
+        
+        function updateQty(idx, qty) { qty = parseInt(qty); if (qty <= 0) removeFromCart(idx); else cartItems[idx].qty = qty; renderCart(); }
+        function removeFromCart(idx) { cartItems.splice(idx, 1); renderCart(); }
+        
+        function updateCartTotal() {
+            const sub = cartItems.reduce((sum, i) => sum + (i.price * i.qty), 0);
+            const fr = parseFloat(document.getElementById('freight').value) || 0;
+            const dis = parseFloat(document.getElementById('discount').value) || 0;
+            const tot = sub + fr - dis;
+            document.getElementById('cartTotalSection').innerHTML = `
+                <div class="order-status">
+                    <div class="status-item"><span>Subtotal:</span><span>R$ ${sub.toFixed(2)}</span></div>
+                    <div class="status-item"><span>Frete:</span><span>R$ ${fr.toFixed(2)}</span></div>
+                    <div class="status-item"><span>Desconto:</span><span>-R$ ${dis.toFixed(2)}</span></div>
+                    <div class="status-item" style="font-weight: 600; border-top: 1px solid #ddd; padding-top: 8px; margin-top: 8px;"><span>Total:</span><span>R$ ${tot.toFixed(2)}</span></div>
+                </div>
+            `;
+        }
+        
+        function createOrder() { createDoc('pedido'); }
+        function createOrcamento() { createDoc('orcamento'); }
+
+        function createDoc(mode) {
+            const errBox = document.getElementById('alertEntrega');
+            errBox.innerHTML = '';
+            const showErr = (msg) => { errBox.innerHTML = '<div class="alert-error">⚠️ ' + msg + '</div>'; errBox.scrollIntoView({behavior:'smooth', block:'center'}); };
+            const isPedido = mode === 'pedido';
+
+            if (!selectedClient) { showErr('Selecione um cliente.'); return; }
+            if (cartItems.length === 0) { showErr('Adicione pelo menos um produto.'); return; }
+
+            const rua = document.getElementById('rentalRua').value.trim();
+            const cep = document.getElementById('rentalCEP').value.trim();
+            const bairro = document.getElementById('rentalBairro').value.trim();
+            const cidade = document.getElementById('rentalCidade').value.trim();
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+
+            if (isPedido) {
+                // Pedido firme: entrega e datas obrigatórias e válidas
+                if (!rua) { showErr('Preencha a rua de entrega.'); return; }
+                if (!validarCEP(cep)) { showErr('CEP de entrega inválido. Use 00000-000 (8 dígitos).'); return; }
+                if (!dataValida(startDate)) { showErr('Data de início inválida.'); return; }
+                if (!dataValida(endDate)) { showErr('Data de devolução inválida.'); return; }
+                if (dataNoPassado(startDate)) { showErr('A data de retirada não pode estar no passado.'); return; }
+                if (new Date(endDate) < new Date(startDate)) { showErr('A devolução não pode ser antes da retirada.'); return; }
+            } else {
+                // Orçamento: datas e CEP opcionais, mas se preenchidos devem ser válidos
+                if (cep && !validarCEP(cep)) { showErr('CEP inválido. Deixe vazio ou use 00000-000.'); return; }
+                if (startDate && !dataValida(startDate)) { showErr('Data de início inválida.'); return; }
+                if (endDate && !dataValida(endDate)) { showErr('Data de devolução inválida.'); return; }
+                if (startDate && endDate && new Date(endDate) < new Date(startDate)) { showErr('A devolução não pode ser antes da retirada.'); return; }
+            }
+
+            const sub = cartItems.reduce((sum, i) => sum + (i.price * i.qty), 0);
+            const fr = parseFloat(document.getElementById('freight').value) || 0;
+            const dis = parseFloat(document.getElementById('discount').value) || 0;
+            const rentalAddress = [rua, bairro, cidade].filter(x => x).join(', ');
+
+            const order = {
+                id: (isPedido ? 'PED' : 'ORC') + Date.now(),
+                clientName: selectedClient.name,
+                clientPhone: selectedClient.phone,
+                clientCPF: selectedClient.cpf,
+                clientEmail: selectedClient.email,
+                clientAddress: selectedClient.endereco,
+                items: cartItems.slice(),
+                rentalRua: rua,
+                rentalCEP: cep ? formatarCEP(cep) : '',
+                rentalBairro: bairro,
+                rentalCidade: cidade,
+                rentalAddress: rentalAddress,
+                startDate: startDate,
+                endDate: endDate,
+                notes: document.getElementById('orderNotes').value,
+                total: sub + fr - dis,
+                frete: fr,
+                desconto: dis,
+                subtotal: sub,
+                status: isPedido ? 'a_retirar' : 'orcamento',
+                deliveredBy: null,
+                createdAt: new Date().toISOString(),
+                createdBy: currentUser.name
+            };
+
+            try {
+                if (isPedido) {
+                    orders.push(order);
+                    save();
+                    alert('✓ Pedido criado! Baixando PDF do pedido + contrato...');
+                    generateOrderPDF(order).then(() => generateContractPDF(order));
+                    syncToSheets('addPedido', { pedido: order })
+                        .then(res => { if (!(res && res.success)) console.warn('Sheets addPedido:', res); })
+                        .catch(err => console.warn('Sheets addPedido falhou:', err));
+                    mostrarWhatsApp(order, 'PEDIDO');
+                    updateDashboard();
+                } else {
+                    orcamentos.push(order);
+                    save();
+                    alert('✓ Orçamento gerado! Baixando PDF...');
+                    generateQuotePDF(order);
+                    syncToSheets('addOrcamento', { orcamento: order })
+                        .then(res => { if (!(res && res.success)) console.warn('Sheets addOrcamento:', res); })
+                        .catch(err => console.warn('Sheets addOrcamento falhou:', err));
+                    mostrarWhatsApp(order, 'ORÇAMENTO');
+                }
+
+                cartItems = [];
+                selectedClient = null;
+                periodoAtivo = null;
+                ['rentalRua', 'rentalCEP', 'rentalBairro', 'rentalCidade', 'startDate', 'endDate', 'orderNotes', 'freight', 'discount'].forEach(id => document.getElementById(id).value = '');
+                document.getElementById('selectedClientName').textContent = 'Nenhum cliente selecionado';
+                renderCart();
+            } catch (e) {
+                console.error('❌ Erro:', e);
+                showErr('Erro: ' + e.message);
+            }
+        }
+        
+        // ===== GERAÇÃO DE PDF COM jsPDF (texto nativo — nunca sai em branco) =====
+        function novoDoc() { const { jsPDF } = window.jspdf; return new jsPDF({ unit: 'mm', format: 'a4' }); }
+
+        function pdfCabecalho(doc, tipo, linhasDireita) {
+            doc.setFillColor(11, 42, 74); doc.rect(0, 0, 210, 28, 'F');
+            doc.setFillColor(245, 197, 24); doc.rect(0, 28, 210, 1.5, 'F');
+            doc.setFillColor(245, 197, 24); doc.roundedRect(15, 7, 14, 14, 2, 2, 'F');
+            doc.setTextColor(11, 42, 74); doc.setFont('helvetica', 'bold'); doc.setFontSize(16);
+            doc.text('S', 22, 17, { align: 'center' });
+            doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(15);
+            doc.text('SCORPIUS LOCAÇÕES', 33, 13);
+            doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(205, 217, 232);
+            doc.text('Locação de Andaimes e Equipamentos', 33, 18.5);
+            doc.setTextColor(245, 197, 24); doc.setFont('helvetica', 'bold'); doc.setFontSize(11);
+            doc.text(tipo, 195, 10, { align: 'right' });
+            doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
+            let ry = 15; (linhasDireita || []).forEach(l => { doc.text(String(l), 195, ry, { align: 'right' }); ry += 3.8; });
+            return 38;
+        }
+        function pdfSecao(doc, y, titulo) {
+            doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(11, 42, 74);
+            doc.text(titulo.toUpperCase(), 15, y);
+            doc.setDrawColor(230, 233, 239); doc.setLineWidth(0.4); doc.line(15, y + 1.5, 195, y + 1.5);
+            return y + 6.5;
+        }
+        function pdfKV(doc, x, y, k, v) {
+            doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(11, 42, 74);
+            doc.text(k, x, y); const kw = doc.getTextWidth(k);
+            doc.setFont('helvetica', 'normal'); doc.setTextColor(40, 48, 60);
+            doc.text(String(v || '—'), x + kw + 1, y);
+        }
+        function pdfItens(doc, y, items) {
+            const x = 15, w = 180;
+            doc.setFillColor(11, 42, 74); doc.rect(x, y, w, 7, 'F');
+            doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5);
+            doc.text('Descrição', 17, y + 4.7);
+            doc.text('Qtd', 120, y + 4.7, { align: 'right' });
+            doc.text('Valor Unit.', 150, y + 4.7, { align: 'right' });
+            doc.text('Subtotal', 193, y + 4.7, { align: 'right' });
+            y += 7;
+            doc.setFont('helvetica', 'normal'); doc.setTextColor(31, 42, 55); doc.setFontSize(8.5);
+            items.forEach((i, idx) => {
+                if (idx % 2 === 1) { doc.setFillColor(247, 249, 252); doc.rect(x, y, w, 7, 'F'); }
+                doc.text(String(i.name).substring(0, 58), 17, y + 4.7);
+                doc.text(String(i.qty), 120, y + 4.7, { align: 'right' });
+                doc.text(fmt(i.price), 150, y + 4.7, { align: 'right' });
+                doc.text(fmt(i.price * i.qty), 193, y + 4.7, { align: 'right' });
+                y += 7;
+            });
+            doc.setDrawColor(230, 233, 239); doc.line(x, y, x + w, y);
+            return y + 3;
+        }
+        function pdfTotais(doc, y, o) {
+            const lx = 120, rx = 193;
+            const linha = (label, val, bold) => {
+                doc.setFont('helvetica', bold ? 'bold' : 'normal'); doc.setFontSize(bold ? 11 : 9);
+                if (bold) doc.setTextColor(11, 42, 74); else doc.setTextColor(80, 90, 100);
+                doc.text(label, lx, y); doc.text(val, rx, y, { align: 'right' }); y += bold ? 7 : 5.5;
+            };
+            linha('Subtotal', fmt(o.subtotal));
+            linha('Frete', fmt(o.frete));
+            linha('Desconto', '- ' + fmt(o.desconto));
+            doc.setDrawColor(11, 42, 74); doc.setLineWidth(0.5); doc.line(lx, y - 2, rx, y - 2);
+            linha('TOTAL', fmt(o.total), true);
+            return y;
+        }
+
+        function generateOrderPDF(order) {
+            try {
+                const doc = novoDoc();
+                const dias = diasEntre(order.startDate, order.endDate);
+                let y = pdfCabecalho(doc, 'PEDIDO DE LOCAÇÃO', ['Nº ' + order.id, new Date(order.createdAt).toLocaleDateString('pt-BR'), 'Vendedor: ' + order.createdBy]);
+                y = pdfSecao(doc, y, 'Cliente');
+                pdfKV(doc, 15, y, 'Nome: ', order.clientName); y += 5;
+                pdfKV(doc, 15, y, 'CPF/CNPJ: ', order.clientCPF); pdfKV(doc, 115, y, 'Tel.: ', order.clientPhone); y += 5;
+                pdfKV(doc, 15, y, 'Email: ', order.clientEmail); y += 8;
+                y = pdfSecao(doc, y, 'Local e Período de Entrega');
+                const end = doc.splitTextToSize('Endereço: ' + (order.rentalAddress || '—') + '  ·  CEP: ' + (order.rentalCEP || '—'), 180);
+                doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(40, 48, 60);
+                doc.text(end, 15, y); y += end.length * 4.5 + 1;
+                pdfKV(doc, 15, y, 'Retirada: ', dataBR(order.startDate));
+                pdfKV(doc, 115, y, 'Devolução: ', dataBR(order.endDate) + ' (' + dias + ' dia' + (dias > 1 ? 's' : '') + ')'); y += 8;
+                y = pdfSecao(doc, y, 'Itens');
+                y = pdfItens(doc, y, order.items);
+                y = pdfTotais(doc, y + 2, order);
+                if (order.notes) {
+                    y += 4; y = pdfSecao(doc, y, 'Observações');
+                    const obs = doc.splitTextToSize(order.notes, 178);
+                    doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(40, 48, 60);
+                    doc.text(obs, 16, y); y += obs.length * 4.5;
+                }
+                doc.setFontSize(8); doc.setTextColor(139, 149, 163);
+                doc.text('Scorpius Locações · Documento gerado em ' + new Date().toLocaleString('pt-BR'), 105, 290, { align: 'center' });
+                doc.save('pedido-' + order.id + '.pdf');
+            } catch (e) { console.error('Erro PDF pedido:', e); alert('Erro ao gerar PDF do pedido: ' + e.message); }
+            return Promise.resolve();
+        }
+
+        function generateQuotePDF(order) {
+            try {
+                const doc = novoDoc();
+                let y = pdfCabecalho(doc, 'ORÇAMENTO', ['Nº ' + order.id, new Date(order.createdAt).toLocaleDateString('pt-BR'), 'Vendedor: ' + order.createdBy]);
+                y = pdfSecao(doc, y, 'Cliente');
+                pdfKV(doc, 15, y, 'Nome: ', order.clientName); y += 5;
+                pdfKV(doc, 15, y, 'CPF/CNPJ: ', order.clientCPF); pdfKV(doc, 115, y, 'Tel.: ', order.clientPhone); y += 8;
+                if (order.startDate || order.endDate) {
+                    y = pdfSecao(doc, y, 'Período Estimado');
+                    pdfKV(doc, 15, y, 'Retirada: ', dataBR(order.startDate));
+                    pdfKV(doc, 115, y, 'Devolução: ', dataBR(order.endDate)); y += 8;
+                }
+                y = pdfSecao(doc, y, 'Itens');
+                y = pdfItens(doc, y, order.items);
+                y = pdfTotais(doc, y + 2, order);
+                y += 6; doc.setFont('helvetica', 'italic'); doc.setFontSize(8.5); doc.setTextColor(120, 130, 140);
+                doc.text('Orçamento válido por 7 dias. Valores sujeitos à disponibilidade dos equipamentos.', 15, y);
+                doc.setFontSize(8); doc.setTextColor(139, 149, 163);
+                doc.text('Scorpius Locações · ' + new Date().toLocaleString('pt-BR'), 105, 290, { align: 'center' });
+                doc.save('orcamento-' + order.id + '.pdf');
+            } catch (e) { console.error('Erro PDF orçamento:', e); alert('Erro ao gerar PDF do orçamento: ' + e.message); }
+            return Promise.resolve();
+        }
+
+        function generateContractPDF(order) {
+            try {
+                const doc = novoDoc();
+                const dias = diasEntre(order.startDate, order.endDate);
+                let y = pdfCabecalho(doc, 'CONTRATO DE LOCAÇÃO', ['Ref. Pedido ' + order.id, new Date(order.createdAt).toLocaleDateString('pt-BR')]);
+                y = pdfSecao(doc, y, '1. Partes');
+                doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(11, 42, 74);
+                doc.text('LOCADORA:', 15, y); doc.setFont('helvetica', 'normal'); doc.setTextColor(40, 48, 60);
+                doc.text('Scorpius Locações — Locação de andaimes e equipamentos', 38, y); y += 6;
+                doc.setFont('helvetica', 'bold'); doc.setTextColor(11, 42, 74);
+                doc.text('LOCATÁRIO(A):', 15, y); doc.setFont('helvetica', 'normal'); doc.setTextColor(40, 48, 60);
+                doc.text(String(order.clientName || '—'), 45, y); y += 5;
+                pdfKV(doc, 15, y, 'CPF/CNPJ: ', order.clientCPF); pdfKV(doc, 115, y, 'Tel.: ', order.clientPhone); y += 5;
+                const endC = doc.splitTextToSize('Endereço: ' + (order.clientAddress || '—'), 180);
+                doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(40, 48, 60);
+                doc.text(endC, 15, y); y += endC.length * 4.5 + 3;
+                y = pdfSecao(doc, y, '2. Objeto da Locação');
+                y = pdfItens(doc, y, order.items.map(i => ({ name: i.name, qty: i.qty, price: i.price })));
+                y = pdfSecao(doc, y + 1, '3. Local de Entrega e Período');
+                const le = doc.splitTextToSize('Local: ' + (order.rentalAddress || '—') + ' — CEP ' + (order.rentalCEP || '—'), 180);
+                doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(40, 48, 60);
+                doc.text(le, 15, y); y += le.length * 4.5;
+                pdfKV(doc, 15, y, 'Início: ', dataBR(order.startDate));
+                pdfKV(doc, 80, y, 'Devolução: ', dataBR(order.endDate));
+                pdfKV(doc, 150, y, 'Prazo: ', dias + ' dia' + (dias > 1 ? 's' : '')); y += 7;
+                y = pdfSecao(doc, y, '4. Valores');
+                y = pdfTotais(doc, y, order);
+                y = pdfSecao(doc, y + 2, '5. Condições Gerais');
+                const clausulas = [
+                    '5.1. O LOCATÁRIO declara receber os equipamentos em perfeito estado de conservação e funcionamento, comprometendo-se a devolvê-los nas mesmas condições, ressalvado o desgaste natural de uso.',
+                    '5.2. O LOCATÁRIO é o único responsável pela guarda, conservação e uso adequado dos equipamentos durante todo o período de locação, respondendo por perdas, furtos, avarias ou danos de qualquer natureza.',
+                    '5.3. Em caso de atraso na devolução, será cobrado o valor proporcional da diária por dia excedente, sem prejuízo de eventuais perdas e danos.',
+                    '5.4. Em caso de perda, furto ou dano irreparável, o LOCATÁRIO indenizará a LOCADORA pelo valor de reposição do equipamento.',
+                    '5.5. Fica eleito o foro da Comarca de São Paulo/SP para dirimir quaisquer questões oriundas deste contrato.'
+                ];
+                doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(40, 48, 60);
+                clausulas.forEach(c => {
+                    const linhas = doc.splitTextToSize(c, 180);
+                    doc.text(linhas, 15, y); y += linhas.length * 4 + 2;
+                });
+                y = Math.max(y, 250); y += 8;
+                doc.setDrawColor(31, 42, 55); doc.setLineWidth(0.3);
+                doc.line(20, y, 90, y); doc.line(120, y, 190, y); y += 4;
+                doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(31, 42, 55);
+                doc.text('LOCATÁRIO(A)', 55, y, { align: 'center' });
+                doc.text('LOCADORA', 155, y, { align: 'center' }); y += 4;
+                doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(139, 149, 163);
+                doc.text(String(order.clientName || ''), 55, y, { align: 'center' });
+                doc.text('Scorpius Locações', 155, y, { align: 'center' });
+                doc.text('São Paulo, ' + new Date(order.createdAt).toLocaleDateString('pt-BR'), 105, 290, { align: 'center' });
+                doc.save('contrato-' + order.id + '.pdf');
+            } catch (e) { console.error('Erro PDF contrato:', e); alert('Erro ao gerar contrato: ' + e.message); }
+            return Promise.resolve();
+        }
+
+        // ===== TEXTO PARA WHATSAPP (copiar e colar) =====
+        function buildWhatsApp(o, tipo) {
+            const itens = o.items.map(i => `• ${i.qty}x ${i.name} — ${fmt(i.price * i.qty)}`).join('\n');
+            let txt = `*SCORPIUS LOCAÇÕES*\n*${tipo} ${o.id}*\n\n`;
+            txt += `*Cliente:* ${o.clientName}\n\n`;
+            txt += `*Itens:*\n${itens}\n\n`;
+            txt += `Subtotal: ${fmt(o.subtotal)}\n`;
+            if (o.frete) txt += `Frete: ${fmt(o.frete)}\n`;
+            if (o.desconto) txt += `Desconto: - ${fmt(o.desconto)}\n`;
+            txt += `*TOTAL: ${fmt(o.total)}*\n`;
+            if (o.startDate || o.endDate) txt += `\n*Retirada:* ${dataBR(o.startDate)}\n*Devolução:* ${dataBR(o.endDate)}\n`;
+            if (o.rentalAddress) txt += `*Entrega:* ${o.rentalAddress}\n`;
+            if (o.notes) txt += `\n*Obs.:* ${o.notes}`;
+            return txt;
+        }
+        function mostrarWhatsApp(o, tipo) {
+            const bloco = document.getElementById('waBlock');
+            const ta = document.getElementById('waText');
+            ta.value = buildWhatsApp(o, tipo);
+            bloco.style.display = 'block';
+            bloco.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+        function copiarWhatsApp() {
+            const ta = document.getElementById('waText');
+            ta.select();
+            navigator.clipboard.writeText(ta.value).then(
+                () => { const b = document.getElementById('waCopyBtn'); b.textContent = '✓ Copiado!'; setTimeout(() => b.textContent = '📋 Copiar texto', 2000); },
+                () => { document.execCommand('copy'); }
+            );
+        }
+        
+        function updateDashboard() {
+            const total = orders.length;
+            const pend = orders.filter(o => o.status === 'a_retirar').length;
+            document.getElementById('totalPedidos').textContent = total;
+            document.getElementById('pendentes').textContent = pend;
+
+            // Ordena por data de vencimento (devolução) mais próxima primeiro
+            const ordenados = [...orders].sort((a, b) => {
+                const da = new Date(a.endDate || a.startDate || a.createdAt);
+                const db = new Date(b.endDate || b.startDate || b.createdAt);
+                return da - db;
+            });
+
+            const hoje = new Date(); hoje.setHours(0,0,0,0);
+            let html = ordenados.map(o => {
+                const venc = o.endDate ? new Date(o.endDate + 'T00:00:00') : null;
+                let vencInfo = '';
+                if (venc) {
+                    const diff = Math.round((venc - hoje) / (1000*60*60*24));
+                    if (o.status !== 'devolvido') {
+                        if (diff < 0) vencInfo = `<span style="color:#dc2626;font-weight:700;">⚠️ Venceu há ${Math.abs(diff)} dia(s)</span>`;
+                        else if (diff === 0) vencInfo = `<span style="color:#dc2626;font-weight:700;">⚠️ Vence hoje</span>`;
+                        else if (diff <= 3) vencInfo = `<span style="color:#f59e0b;font-weight:700;">Vence em ${diff} dia(s)</span>`;
+                        else vencInfo = `<span style="color:#16a34a;">Vence em ${diff} dia(s)</span>`;
+                    } else {
+                        vencInfo = '<span style="color:#16a34a;">Concluído</span>';
+                    }
+                }
+                const itensResumo = (o.items || []).map(i => `${i.qty}× ${i.name}`).join(' · ');
+                return `
+                <div onclick="openOrderDetail('${o.id}')" style="cursor:pointer;padding:14px;background:#fff;border:1px solid var(--line);border-radius:12px;margin-bottom:10px;border-left:5px solid ${statusColor(o.status)};box-shadow:0 1px 4px rgba(16,32,56,.05)">
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+                        <div>
+                            <p style="font-size:14px;font-weight:700;color:var(--navy);margin:0">${o.clientName}</p>
+                            <p style="font-size:11px;color:#8b95a3;margin:2px 0">${o.id}</p>
+                        </div>
+                        <div style="text-align:right;">
+                            <p style="font-size:15px;font-weight:800;color:var(--navy);margin:0">${fmt(o.total)}</p>
+                            <p style="font-size:11px;margin:2px 0">${statusLabel(o.status)}</p>
+                        </div>
+                    </div>
+                    <p style="font-size:12px;color:#4b5563;margin:8px 0 4px">📦 ${itensResumo || '—'}</p>
+                    <p style="font-size:12px;color:#4b5563;margin:4px 0">📍 ${o.rentalAddress || '—'}${o.rentalCEP ? ' · CEP ' + o.rentalCEP : ''}</p>
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;font-size:11px;">
+                        <span style="color:#6b7280;">Retirada ${dataBR(o.startDate)} → Devolução ${dataBR(o.endDate)}</span>
+                        ${vencInfo}
+                    </div>
+                    <p style="font-size:11px;color:var(--navy);margin:8px 0 0;font-weight:600;">Toque para ver detalhes →</p>
+                </div>`;
+            }).join('');
+            document.getElementById('ultimosPedidos').innerHTML = html || '<div class="empty-state">Nenhum pedido ainda</div>';
+        }
+
+        // ===== DETALHE DO PEDIDO (tela cheia) =====
+        function openOrderDetail(id) {
+            const o = orders.find(x => x.id === id) || orcamentos.find(x => x.id === id);
+            if (!o) return;
+            const dias = diasEntre(o.startDate, o.endDate);
+            const itens = (o.items || []).map(i => `
+                <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line);">
+                    <div><div style="font-weight:600;font-size:14px;">${i.name}</div><div style="font-size:12px;color:#6b7280;">${fmt(i.price)} × ${i.qty}</div></div>
+                    <div style="font-weight:700;color:var(--navy);">${fmt(i.price * i.qty)}</div>
+                </div>`).join('');
+
+            const acoesStatus = (o.status !== 'orcamento') ? `
+                <div class="card">
+                    <h2>Status</h2>
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;">
+                        <button class="btn btn-secondary btn-small" style="width:100%;" onclick="mudarStatus('${o.id}','a_retirar')">🟡 A Retirar</button>
+                        <button class="btn btn-secondary btn-small" style="width:100%;" onclick="mudarStatus('${o.id}','retirado')">🔵 Retirado</button>
+                        <button class="btn btn-secondary btn-small" style="width:100%;" onclick="mudarStatus('${o.id}','devolvido')">🟢 Devolvido</button>
+                    </div>
+                </div>` : '';
+
+            document.getElementById('orderDetailContent').innerHTML = `
+                <div class="card" style="border-left:5px solid ${statusColor(o.status)};">
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+                        <div>
+                            <h2 style="border:none;margin:0;padding:0;">${o.id}</h2>
+                            <p style="font-size:13px;color:#6b7280;margin:4px 0;">${statusLabel(o.status)} · criado por ${o.createdBy || '—'}</p>
+                        </div>
+                        <div style="font-size:20px;font-weight:800;color:var(--navy);">${fmt(o.total)}</div>
+                    </div>
+                </div>
+                <div class="card">
+                    <h2>Cliente</h2>
+                    <p style="margin:4px 0;"><b>${o.clientName}</b></p>
+                    <p style="margin:4px 0;font-size:13px;color:#4b5563;">📞 ${o.clientPhone || '—'}</p>
+                    <p style="margin:4px 0;font-size:13px;color:#4b5563;">🆔 ${o.clientCPF || '—'}</p>
+                    <p style="margin:4px 0;font-size:13px;color:#4b5563;">📧 ${o.clientEmail || '—'}</p>
+                </div>
+                <div class="card">
+                    <h2>Entrega</h2>
+                    <p style="margin:4px 0;font-size:13px;">📍 ${o.rentalAddress || '—'}${o.rentalCEP ? ' · CEP ' + o.rentalCEP : ''}</p>
+                    <p style="margin:4px 0;font-size:13px;">📅 Retirada: <b>${dataBR(o.startDate)}</b></p>
+                    <p style="margin:4px 0;font-size:13px;">📅 Devolução: <b>${dataBR(o.endDate)}</b> (${dias} dia${dias > 1 ? 's' : ''})</p>
+                    ${o.notes ? `<p style="margin:8px 0 0;font-size:13px;color:#4b5563;">📝 ${o.notes}</p>` : ''}
+                </div>
+                <div class="card">
+                    <h2>Itens</h2>
+                    ${itens}
+                    <div style="margin-top:12px;font-size:13px;">
+                        <div style="display:flex;justify-content:space-between;padding:4px 0;"><span>Subtotal</span><span>${fmt(o.subtotal)}</span></div>
+                        <div style="display:flex;justify-content:space-between;padding:4px 0;"><span>Frete</span><span>${fmt(o.frete)}</span></div>
+                        <div style="display:flex;justify-content:space-between;padding:4px 0;"><span>Desconto</span><span>- ${fmt(o.desconto)}</span></div>
+                        <div style="display:flex;justify-content:space-between;padding:8px 0 0;border-top:2px solid var(--navy);font-weight:800;color:var(--navy);font-size:15px;"><span>TOTAL</span><span>${fmt(o.total)}</span></div>
+                    </div>
+                </div>
+                ${acoesStatus}
+                <div class="card">
+                    <h2>Documentos</h2>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                        ${o.status === 'orcamento'
+                            ? `<button class="btn btn-small" style="width:100%;" onclick="reimprimir('${o.id}','orcamento')">📄 Baixar Orçamento</button>`
+                            : `<button class="btn btn-small" style="width:100%;" onclick="reimprimir('${o.id}','pedido')">📄 Baixar Pedido</button>
+                               <button class="btn btn-small" style="width:100%;" onclick="reimprimir('${o.id}','contrato')">📄 Baixar Contrato</button>`}
+                    </div>
+                    <button class="btn btn-secondary btn-small" style="width:100%;margin-top:8px;" onclick="reimprimir('${o.id}','whatsapp')">💬 Ver texto WhatsApp</button>
+                </div>`;
+
+            showOnly('orderDetail');
+        }
+
+        function showOnly(sectionId) {
+            document.querySelectorAll('.content-section').forEach(e => e.classList.remove('active'));
+            document.getElementById(sectionId).classList.add('active');
+            window.scrollTo(0, 0);
+        }
+        function voltarDashboard() {
+            showOnly('dashboard');
+            document.querySelectorAll('.tab').forEach(e => e.classList.remove('active'));
+            const dashTab = document.querySelector('.tab'); if (dashTab) dashTab.classList.add('active');
+            updateDashboard();
+        }
+        function mudarStatus(id, novo) {
+            const o = orders.find(x => x.id === id);
+            if (!o) return;
+            o.status = novo;
+            save();
+            syncToSheets('updatePedidoStatus', { id: id, status: novo }).catch(() => {});
+            openOrderDetail(id);
+        }
+        function reimprimir(id, tipo) {
+            const o = orders.find(x => x.id === id) || orcamentos.find(x => x.id === id);
+            if (!o) return;
+            if (tipo === 'pedido') generateOrderPDF(o);
+            else if (tipo === 'contrato') generateContractPDF(o);
+            else if (tipo === 'orcamento') generateQuotePDF(o);
+            else if (tipo === 'whatsapp') {
+                const tipoTxt = o.status === 'orcamento' ? 'ORÇAMENTO' : 'PEDIDO';
+                switchTab('pedido', document.querySelectorAll('.tab')[1]);
+                mostrarWhatsApp(o, tipoTxt);
+            }
+        }
+        
+        function renderHistorico() {
+            const ordenados = [...orders].sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
+            let html = ordenados.map(o => `
+                <div style="padding:12px;background:#fff;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;border-left:4px solid ${statusColor(o.status)}">
+                    <div style="display:flex;justify-content:space-between;">
+                        <p style="font-size:13px;font-weight:700;color:var(--navy);margin:0">${o.clientName}</p>
+                        <p style="font-size:13px;font-weight:700;margin:0">${fmt(o.total)}</p>
+                    </div>
+                    <p style="font-size:11px;color:#8b95a3;margin:3px 0">${o.id} · ${statusLabel(o.status)} · ${dataBR(o.startDate)} → ${dataBR(o.endDate)}</p>
+                </div>`).join('');
+            document.getElementById('historicoList').innerHTML = html || '<div class="empty-state">Nenhum pedido</div>';
+        }
+        
+        window.addEventListener('load', () => {
+            init();
+            renderHistorico();
+        });
+    </script>
+</body>
+</html>
