@@ -440,6 +440,7 @@
                             <div id="searchResults" style="margin-top: 10px;"></div>
                         </div>
                         <p id="selectedClientName" style="font-size: 14px; color: #003366; font-weight: 600;">Nenhum cliente selecionado</p>
+                        <div id="selectedClientInfo" style="display:none;background:#f0f6ff;border-radius:8px;padding:10px;margin-top:8px;font-size:12px;color:#444;border-left:3px solid #003366;line-height:1.8;"></div>
                     </div>
                     
                     <div class="card"><h2>📦 Produtos</h2>
@@ -459,17 +460,23 @@
                     </div>
                     
                     <div class="card">
-                        <h2>📍 Entrega</h2>
+                        <h2>📍 Entrega / Retirada</h2>
                         <div id="alertEntrega"></div>
-                        <button class="btn btn-secondary btn-small" style="width:100%; margin-bottom:12px;" onclick="copiarEnderecoCadastro()">📋 Copiar endereço do cadastro do cliente</button>
-                        <div class="form-group"><label>Rua e Número</label><input type="text" id="rentalRua" placeholder="Rua, número, complemento"></div>
-                        <div class="grid-2">
-                            <div class="form-group"><label>CEP</label><input type="text" id="rentalCEP" placeholder="00000-000"></div>
-                            <div class="form-group"><label>Bairro</label><input type="text" id="rentalBairro" placeholder="Bairro"></div>
+                        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:14px;font-size:13px;font-weight:600;color:var(--navy);background:#f0f6ff;padding:10px;border-radius:8px;">
+                            <input type="checkbox" id="clienteRetira" onchange="toggleRetirada(this)" style="width:16px;height:16px;">
+                            🏪 Cliente vai retirar — sem endereço de entrega
+                        </label>
+                        <div id="enderecoSection">
+                            <button class="btn btn-secondary btn-small" style="width:100%; margin-bottom:12px;" onclick="copiarEnderecoCadastro()">📋 Copiar endereço do cadastro do cliente</button>
+                            <div class="form-group"><label>Rua e Número</label><input type="text" id="rentalRua" placeholder="Rua, número, complemento"></div>
+                            <div class="grid-2">
+                                <div class="form-group"><label>CEP</label><input type="text" id="rentalCEP" placeholder="00000-000"></div>
+                                <div class="form-group"><label>Bairro</label><input type="text" id="rentalBairro" placeholder="Bairro"></div>
+                            </div>
+                            <div class="form-group"><label>Cidade</label><input type="text" id="rentalCidade" placeholder="São Paulo"></div>
                         </div>
-                        <div class="form-group"><label>Cidade</label><input type="text" id="rentalCidade" placeholder="São Paulo"></div>
 
-                        <div class="form-group" style="margin-bottom:8px;">
+                        <div class="form-group" style="margin-bottom:8px;margin-top:4px;">
                             <label>Período (preenche a devolução automaticamente)</label>
                             <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px;">
                                 <button type="button" class="btn btn-secondary btn-small" style="width:100%;" onclick="aplicarPeriodo(7)">Semanal</button>
@@ -478,8 +485,8 @@
                             </div>
                         </div>
                         <div class="grid-2">
-                            <div class="form-group"><label>Data Início (retirada)</label><input type="date" id="startDate" onchange="reaplicarPeriodo()"></div>
-                            <div class="form-group"><label>Data Devolução</label><input type="date" id="endDate"></div>
+                            <div class="form-group"><label>Data Início (retirada)</label><input type="date" id="startDate" onchange="reaplicarPeriodo()"><small style="color:#8b95a3;font-size:10px;">dia/mês/ano</small></div>
+                            <div class="form-group"><label>Data Devolução</label><input type="date" id="endDate"><small style="color:#8b95a3;font-size:10px;">dia/mês/ano</small></div>
                         </div>
                         <div class="form-group"><label>Observações</label><textarea id="orderNotes" placeholder="..."></textarea></div>
                         <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
@@ -577,6 +584,7 @@
             {id: 5, name: 'Escada 5 degraus', price: 45}
         ];
         let selectedClient = null;
+        let editingClientIdx = null;
         let cartItems = [];
         let orders = [];
         let orcamentos = [];
@@ -773,6 +781,19 @@
             document.getElementById('selectedClientName').textContent = selectedClient.name + ' ✓';
             document.getElementById('searchClient').value = '';
             document.getElementById('searchResults').innerHTML = '';
+            const info = document.getElementById('selectedClientInfo');
+            info.style.display = 'block';
+            info.innerHTML =
+                `<b>${selectedClient.name}</b><br>` +
+                `📞 ${selectedClient.phone || '—'} &nbsp;|&nbsp; 🆔 CPF: ${selectedClient.cpf || '—'}<br>` +
+                `📍 ${selectedClient.endereco || '—'}<br>` +
+                `📮 CEP: ${selectedClient.cep || '—'}` +
+                (selectedClient.email ? `<br>📧 ${selectedClient.email}` : '') +
+                (selectedClient.comentarios ? `<br>💬 ${selectedClient.comentarios}` : '');
+        }
+
+        function toggleRetirada(cb) {
+            document.getElementById('enderecoSection').style.display = cb.checked ? 'none' : 'block';
         }
         
         function filterClientsList(term) {
@@ -801,6 +822,7 @@
                         ${c.bairro ? `<p style="font-size:12px;color:#444;margin:4px 0;">🏘️ ${c.bairro} — ${c.cidade || ''}</p>` : ''}
                         ${c.nascimento ? `<p style="font-size:12px;color:#444;margin:4px 0;">🎂 Nasc.: ${c.nascimento}</p>` : ''}
                         ${c.comentarios ? `<p style="font-size:12px;color:#444;margin:8px 0 0;white-space:pre-wrap;">💬 ${c.comentarios}</p>` : ''}
+                        ${(currentUser && currentUser.isAdmin) ? `<button class="btn btn-secondary btn-small" style="width:100%;margin-top:10px;" onclick="editClient(${idx});event.stopPropagation();">✏️ Editar cadastro</button>` : ''}
                     </div>
                 </div>`;
             }).join('');
@@ -813,6 +835,74 @@
             const aberto = extra.style.display !== 'none';
             extra.style.display = aberto ? 'none' : 'block';
             arrow.textContent = aberto ? '▾ ver mais' : '▴ ver menos';
+        }
+
+        function editClient(idx) {
+            editingClientIdx = idx;
+            const c = mockClientes[idx];
+            if (!c) return;
+            const panel = document.createElement('div');
+            panel.id = 'editClientPanel';
+            panel.className = 'card';
+            panel.style.cssText = 'border:2px solid var(--navy);margin-bottom:16px;';
+            panel.innerHTML = `
+                <h2>✏️ Editando cliente</h2>
+                <div id="editClientError"></div>
+                <div class="form-group"><label>Nome</label><input id="ec_name" type="text"></div>
+                <div class="grid-2">
+                    <div class="form-group"><label>Telefone</label><input id="ec_phone" type="tel"></div>
+                    <div class="form-group"><label>Email</label><input id="ec_email" type="email"></div>
+                </div>
+                <div class="grid-2">
+                    <div class="form-group"><label>CPF</label><input id="ec_cpf" type="text"></div>
+                    <div class="form-group"><label>CEP</label><input id="ec_cep" type="text"></div>
+                </div>
+                <div class="form-group"><label>Rua e Número</label><input id="ec_rua" type="text"></div>
+                <div class="grid-2">
+                    <div class="form-group"><label>Bairro</label><input id="ec_bairro" type="text"></div>
+                    <div class="form-group"><label>Cidade</label><input id="ec_cidade" type="text"></div>
+                </div>
+                <div class="form-group"><label>Comentários</label><textarea id="ec_comentarios" style="min-height:60px;"></textarea></div>
+                <div style="display:flex;gap:8px;">
+                    <button class="btn btn-small" style="width:auto;" onclick="saveEditClient()">💾 Salvar</button>
+                    <button class="btn btn-secondary btn-small" style="width:auto;" onclick="renderClientsList()">Cancelar</button>
+                </div>`;
+            const list = document.getElementById('clientsList');
+            list.insertBefore(panel, list.firstChild);
+            document.getElementById('ec_name').value = c.name || '';
+            document.getElementById('ec_phone').value = c.phone || '';
+            document.getElementById('ec_email').value = c.email || '';
+            document.getElementById('ec_cpf').value = c.cpf || '';
+            document.getElementById('ec_cep').value = c.cep || '';
+            document.getElementById('ec_rua').value = c.rua || c.endereco || '';
+            document.getElementById('ec_bairro').value = c.bairro || '';
+            document.getElementById('ec_cidade').value = c.cidade || '';
+            document.getElementById('ec_comentarios').value = c.comentarios || '';
+            panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        function saveEditClient() {
+            const idx = editingClientIdx;
+            const c = mockClientes[idx];
+            if (!c) return;
+            const name = document.getElementById('ec_name').value.trim();
+            if (!name) {
+                document.getElementById('editClientError').innerHTML = '<div class="alert-error">Nome é obrigatório.</div>';
+                return;
+            }
+            c.name = name;
+            c.phone = document.getElementById('ec_phone').value.trim();
+            c.email = document.getElementById('ec_email').value.trim();
+            c.cpf = document.getElementById('ec_cpf').value.trim();
+            c.cep = document.getElementById('ec_cep').value.trim();
+            c.rua = document.getElementById('ec_rua').value.trim();
+            c.bairro = document.getElementById('ec_bairro').value.trim();
+            c.cidade = document.getElementById('ec_cidade').value.trim();
+            c.comentarios = document.getElementById('ec_comentarios').value.trim();
+            c.endereco = [c.rua, c.bairro, c.cidade].filter(x => x).join(', ');
+            editingClientIdx = null;
+            save();
+            renderClientsList();
         }
         
         function toggleNewClientForm() {
@@ -1060,6 +1150,7 @@
             if (!selectedClient) { showErr('Selecione um cliente.'); return; }
             if (cartItems.length === 0) { showErr('Adicione pelo menos um produto.'); return; }
 
+            const clienteRetira = document.getElementById('clienteRetira').checked;
             const rua = document.getElementById('rentalRua').value.trim();
             const cep = document.getElementById('rentalCEP').value.trim();
             const bairro = document.getElementById('rentalBairro').value.trim();
@@ -1069,8 +1160,8 @@
 
             if (isPedido) {
                 // Pedido firme: entrega e datas obrigatórias e válidas
-                if (!rua) { showErr('Preencha a rua de entrega.'); return; }
-                if (!validarCEP(cep)) { showErr('CEP de entrega inválido. Use 00000-000 (8 dígitos).'); return; }
+                if (!clienteRetira && !rua) { showErr('Preencha a rua de entrega ou marque "Cliente vai retirar".'); return; }
+                if (!clienteRetira && !validarCEP(cep)) { showErr('CEP de entrega inválido. Use 00000-000 (8 dígitos).'); return; }
                 if (!dataValida(startDate)) { showErr('Data de início inválida.'); return; }
                 if (!dataValida(endDate)) { showErr('Data de devolução inválida.'); return; }
                 if (dataNoPassado(startDate)) { showErr('A data de retirada não pode estar no passado.'); return; }
@@ -1086,7 +1177,7 @@
             const sub = cartItems.reduce((sum, i) => sum + (i.price * i.qty), 0);
             const fr = parseFloat(document.getElementById('freight').value) || 0;
             const dis = parseFloat(document.getElementById('discount').value) || 0;
-            const rentalAddress = [rua, bairro, cidade].filter(x => x).join(', ');
+            const rentalAddress = clienteRetira ? 'Retirada na loja' : [rua, bairro, cidade].filter(x => x).join(', ');
 
             const order = {
                 id: (isPedido ? 'PED' : 'ORC') + Date.now(),
@@ -1096,10 +1187,10 @@
                 clientEmail: selectedClient.email,
                 clientAddress: selectedClient.endereco,
                 items: cartItems.slice(),
-                rentalRua: rua,
-                rentalCEP: cep ? formatarCEP(cep) : '',
-                rentalBairro: bairro,
-                rentalCidade: cidade,
+                rentalRua: clienteRetira ? '' : rua,
+                rentalCEP: clienteRetira ? '' : (cep ? formatarCEP(cep) : ''),
+                rentalBairro: clienteRetira ? '' : bairro,
+                rentalCidade: clienteRetira ? '' : cidade,
                 rentalAddress: rentalAddress,
                 startDate: startDate,
                 endDate: endDate,
@@ -1141,6 +1232,10 @@
                 periodoAtivo = null;
                 ['rentalRua', 'rentalCEP', 'rentalBairro', 'rentalCidade', 'startDate', 'endDate', 'orderNotes', 'freight', 'discount'].forEach(id => document.getElementById(id).value = '');
                 document.getElementById('selectedClientName').textContent = 'Nenhum cliente selecionado';
+                document.getElementById('selectedClientInfo').style.display = 'none';
+                document.getElementById('selectedClientInfo').innerHTML = '';
+                document.getElementById('clienteRetira').checked = false;
+                document.getElementById('enderecoSection').style.display = 'block';
                 renderCart();
             } catch (e) {
                 console.error('❌ Erro:', e);
@@ -1210,7 +1305,9 @@
             linha('Subtotal', fmt(o.subtotal));
             linha('Frete', fmt(o.frete));
             linha('Desconto', '- ' + fmt(o.desconto));
-            doc.setDrawColor(11, 42, 74); doc.setLineWidth(0.5); doc.line(lx, y - 2, rx, y - 2);
+            y += 2;
+            doc.setDrawColor(11, 42, 74); doc.setLineWidth(0.5); doc.line(lx, y, rx, y);
+            y += 4;
             linha('TOTAL', fmt(o.total), true);
             return y;
         }
@@ -1357,6 +1454,25 @@
         }
         
         function autoLoadFromSheets() {
+            syncToSheets('getClientes', {}).then(res => {
+                if (res && res.success && res.data && res.data.length) {
+                    const locais = mockClientes.filter(c => String(c.id).length >= 13 && !res.data.find(s => s.cpf && s.cpf === c.cpf));
+                    mockClientes = [...res.data, ...locais];
+                    save();
+                    renderClientsList();
+                }
+            }).catch(() => {});
+            syncToSheets('getProdutos', {}).then(res => {
+                if (res && res.success && Array.isArray(res.data) && res.data.length) {
+                    mockProducts = res.data.map((p, i) => ({
+                        id: p.id || (i + 1),
+                        name: p.name || p.nome || '',
+                        price: Number(p.price || p.preco || 0)
+                    })).filter(p => p.name);
+                    save();
+                    renderProductsList();
+                }
+            }).catch(() => {});
             syncToSheets('getOrders', {}).then(res => {
                 if (res && res.success && Array.isArray(res.data) && res.data.length) {
                     const merged = res.data.map(s => {
