@@ -616,6 +616,14 @@
         }
         function fmt(v) { return 'R$ ' + Number(v || 0).toFixed(2).replace('.', ','); }
         function dataBR(s) { return s ? new Date(s + 'T00:00:00').toLocaleDateString('pt-BR') : '—'; }
+        function parseItensStr(str) {
+            if (!str) return [];
+            return String(str).split(';').map(s => {
+                const m = s.trim().match(/^(\d+)x\s+(.+)$/);
+                if (m) return { qty: parseInt(m[1]), name: m[2].trim(), price: 0 };
+                return { qty: 1, name: s.trim(), price: 0 };
+            }).filter(i => i.name);
+        }
         function diasEntre(a, b) {
             const d = Math.ceil((new Date(b) - new Date(a)) / (1000 * 60 * 60 * 24));
             return isNaN(d) || d < 1 ? 1 : d;
@@ -667,6 +675,7 @@
             currentUser = found;
             sessionStorage.setItem('scorpius_session', JSON.stringify(found));
             init();
+            autoLoadFromSheets();
             document.getElementById('loginScreen').style.display = 'none';
             document.getElementById('appScreen').style.display = 'flex';
             document.getElementById('currentUser').textContent = '👤 ' + currentUser.name.toUpperCase() + (currentUser.isAdmin ? ' (Admin)' : '');
@@ -1347,6 +1356,38 @@
             );
         }
         
+        function autoLoadFromSheets() {
+            syncToSheets('getOrders', {}).then(res => {
+                if (res && res.success && Array.isArray(res.data) && res.data.length) {
+                    const merged = res.data.map(s => {
+                        s.id = String(s.id);
+                        s.items = s.items && s.items.length ? s.items : parseItensStr(s.itensStr);
+                        const local = orders.find(o => o.id === s.id);
+                        return local || s;
+                    });
+                    const localOnly = orders.filter(o => !res.data.find(s => String(s.id) === o.id));
+                    orders = [...merged, ...localOnly];
+                    save();
+                    updateDashboard();
+                    renderHistorico();
+                }
+            }).catch(() => {});
+            syncToSheets('getOrcamentos', {}).then(res => {
+                if (res && res.success && Array.isArray(res.data) && res.data.length) {
+                    const merged = res.data.map(s => {
+                        s.id = String(s.id);
+                        s.items = s.items && s.items.length ? s.items : parseItensStr(s.itensStr);
+                        const local = orcamentos.find(o => o.id === s.id);
+                        return local || s;
+                    });
+                    const localOnly = orcamentos.filter(o => !res.data.find(s => String(s.id) === o.id));
+                    orcamentos = [...merged, ...localOnly];
+                    save();
+                    renderHistorico();
+                }
+            }).catch(() => {});
+        }
+
         function updateDashboard() {
             const total = orders.length;
             const pend = orders.filter(o => o.status === 'a_retirar').length;
@@ -1503,16 +1544,33 @@
         }
         
         function renderHistorico() {
-            const ordenados = [...orders].sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
-            let html = ordenados.map(o => `
-                <div style="padding:12px;background:#fff;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;border-left:4px solid ${statusColor(o.status)}">
-                    <div style="display:flex;justify-content:space-between;">
-                        <p style="font-size:13px;font-weight:700;color:var(--navy);margin:0">${o.clientName}</p>
-                        <p style="font-size:13px;font-weight:700;margin:0">${fmt(o.total)}</p>
+            const todos = [
+                ...orders.map(o => ({...o, _tipo: 'pedido'})),
+                ...orcamentos.map(o => ({...o, _tipo: 'orcamento'}))
+            ].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+            let html = todos.map(o => {
+                const itensTexto = (o.items && o.items.length)
+                    ? o.items.map(i => i.qty + 'x ' + i.name).join(' · ')
+                    : (o.itensStr || '—');
+                const btnsPDF = o._tipo === 'orcamento'
+                    ? `<button class="btn btn-secondary btn-small" onclick="reimprimir('${o.id}','orcamento')">📄 PDF Orçamento</button>`
+                    : `<button class="btn btn-secondary btn-small" onclick="reimprimir('${o.id}','pedido')">📄 PDF Pedido</button>
+                       <button class="btn btn-secondary btn-small" onclick="reimprimir('${o.id}','contrato')">📄 Contrato</button>`;
+                return `<div style="padding:14px;background:#fff;border:1px solid var(--line);border-radius:10px;margin-bottom:10px;border-left:4px solid ${statusColor(o.status)}">
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+                        <div>
+                            <p style="font-size:13px;font-weight:700;color:var(--navy);margin:0">${o.clientName}</p>
+                            <p style="font-size:11px;color:#8b95a3;margin:2px 0">${o.id} · ${statusLabel(o.status)}</p>
+                        </div>
+                        <p style="font-size:14px;font-weight:700;margin:0;white-space:nowrap;">${fmt(o.total)}</p>
                     </div>
-                    <p style="font-size:11px;color:#8b95a3;margin:3px 0">${o.id} · ${statusLabel(o.status)} · ${dataBR(o.startDate)} → ${dataBR(o.endDate)}</p>
-                </div>`).join('');
-            document.getElementById('historicoList').innerHTML = html || '<div class="empty-state">Nenhum pedido</div>';
+                    <p style="font-size:11px;color:#4b5563;margin:6px 0 2px;">📦 ${itensTexto}</p>
+                    <p style="font-size:11px;color:#6b7280;margin:2px 0;">📅 ${dataBR(o.startDate)} → ${dataBR(o.endDate)}</p>
+                    <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;">${btnsPDF}</div>
+                </div>`;
+            }).join('');
+            document.getElementById('historicoList').innerHTML = html || '<div class="empty-state">Nenhum pedido ou orçamento</div>';
         }
         
         window.addEventListener('load', () => {
@@ -1527,6 +1585,7 @@
                     document.getElementById('currentUser').textContent = '👤 ' + currentUser.name.toUpperCase() + (currentUser.isAdmin ? ' (Admin)' : '');
                     document.getElementById('adminTab').style.display = currentUser.isAdmin ? 'block' : 'none';
                     if (currentUser.isAdmin) renderAdminPanel();
+                    autoLoadFromSheets();
                 } catch(e) {
                     sessionStorage.removeItem('scorpius_session');
                 }
