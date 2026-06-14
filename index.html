@@ -1,4 +1,4 @@
-    <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
@@ -8,6 +8,7 @@
     <meta name="apple-mobile-web-app-title" content="Scorpius">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         html, body { height: 100%; }
@@ -403,20 +404,58 @@
             <div class="container">
                 <!-- DASHBOARD -->
                 <div id="dashboard" class="content-section active">
-                    <div class="card">
-                        <h2>📊 Dashboard</h2>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-                            <div class="stat-card">
-                                <div class="number" id="totalPedidos">0</div>
-                                <div class="label">Pedidos Totais</div>
-                            </div>
-                            <div class="stat-card">
-                                <div class="number" id="pendentes">0</div>
-                                <div class="label">A Retirar</div>
-                            </div>
+                    <!-- KPIs -->
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+                        <div class="stat-card">
+                            <div class="number" id="totalPedidos" style="font-size:24px;">0</div>
+                            <div class="label">Pedidos</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="number" id="dashReceita" style="font-size:20px;">R$ 0</div>
+                            <div class="label">Receita Total</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="number" id="pendentes" style="font-size:24px;">0</div>
+                            <div class="label">A Retirar</div>
+                        </div>
+                        <div class="stat-card" style="background:linear-gradient(135deg,#dc2626,#991b1b);">
+                            <div class="number" id="dashVencidos" style="font-size:24px;">0</div>
+                            <div class="label">Vencidos</div>
                         </div>
                     </div>
-                    
+
+                    <!-- Na rua agora -->
+                    <div class="card">
+                        <h2>🏗️ Na Rua Agora</h2>
+                        <p style="font-size:11px;color:#6b7280;margin:-4px 0 10px;">Itens em pedidos com status "Retirado" (não devolvidos)</p>
+                        <div id="naRuaAgora"><div class="empty-state">Nenhum item em campo</div></div>
+                    </div>
+
+                    <!-- Gráfico receita mensal -->
+                    <div class="card">
+                        <h2>📈 Receita Mensal</h2>
+                        <div style="position:relative;height:200px;"><canvas id="chartReceita"></canvas></div>
+                    </div>
+
+                    <!-- Gráfico pedidos por mês -->
+                    <div class="card">
+                        <h2>📦 Pedidos por Mês</h2>
+                        <div style="position:relative;height:180px;"><canvas id="chartPedidosMes"></canvas></div>
+                    </div>
+
+                    <!-- Gráfico produtos mais alugados -->
+                    <div class="card">
+                        <h2>🏅 Produtos Mais Alugados</h2>
+                        <div style="position:relative;height:220px;"><canvas id="chartProdutos"></canvas></div>
+                    </div>
+
+                    <!-- Receita por produto -->
+                    <div class="card">
+                        <h2>💰 Receita por Produto</h2>
+                        <div style="position:relative;height:220px;"><canvas id="chartReceitaProd"></canvas></div>
+                    </div>
+
+                    <!-- Pedidos por vencimento -->
                     <div class="card">
                         <h2>📋 Pedidos por Vencimento</h2>
                         <div id="ultimosPedidos"></div>
@@ -836,7 +875,11 @@
                         ${c.bairro ? `<p style="font-size:12px;color:#444;margin:4px 0;">🏘️ ${c.bairro} — ${c.cidade || ''}</p>` : ''}
                         ${c.nascimento ? `<p style="font-size:12px;color:#444;margin:4px 0;">🎂 Nasc.: ${c.nascimento}</p>` : ''}
                         ${c.comentarios ? `<p style="font-size:12px;color:#444;margin:8px 0 0;white-space:pre-wrap;">💬 ${c.comentarios}</p>` : ''}
-                        ${(currentUser && currentUser.isAdmin) ? `<button class="btn btn-secondary btn-small" style="width:100%;margin-top:10px;" onclick="editClient(${idx});event.stopPropagation();">✏️ Editar cadastro</button>` : ''}
+                        ${(currentUser && currentUser.isAdmin) ? `
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:10px;">
+                            <button class="btn btn-secondary btn-small" style="width:100%;" onclick="editClient(${idx});event.stopPropagation();">✏️ Editar</button>
+                            <button class="btn btn-small" style="background:#dc2626;width:100%;" onclick="event.stopPropagation();deletarCliente(${idx})">🗑️ Excluir</button>
+                        </div>` : ''}
                     </div>
                 </div>`;
             }).join('');
@@ -1518,51 +1561,198 @@
             }).catch(() => {});
         }
 
+        // Guarda instâncias dos gráficos para destruir antes de recriar
+        const _charts = {};
+        function criarGrafico(id, config) {
+            if (_charts[id]) { _charts[id].destroy(); }
+            const canvas = document.getElementById(id);
+            if (!canvas) return;
+            _charts[id] = new Chart(canvas, config);
+        }
+
         function updateDashboard() {
+            const hoje = new Date(); hoje.setHours(0,0,0,0);
             const total = orders.length;
-            const pend = orders.filter(o => o.status === 'a_retirar').length;
+            const pend  = orders.filter(o => o.status === 'a_retirar').length;
+            const venc  = orders.filter(o => {
+                if (o.status === 'devolvido') return false;
+                const d = o.endDate ? new Date(o.endDate + 'T00:00:00') : null;
+                return d && d < hoje;
+            }).length;
+            const receitaTotal = orders.reduce((s, o) => s + (Number(o.total) || 0), 0);
+
             document.getElementById('totalPedidos').textContent = total;
             document.getElementById('pendentes').textContent = pend;
+            document.getElementById('dashVencidos').textContent = venc;
+            document.getElementById('dashReceita').textContent = fmt(receitaTotal);
 
-            // Ordena por data de vencimento (devolução) mais próxima primeiro
+            // ---- Na rua agora (status = retirado) ----
+            const naRua = {};
+            orders.filter(o => o.status === 'retirado').forEach(o => {
+                (o.items || []).forEach(i => {
+                    naRua[i.name] = (naRua[i.name] || 0) + (Number(i.qty) || 0);
+                });
+            });
+            const ruaEntries = Object.entries(naRua).sort((a, b) => b[1] - a[1]);
+            document.getElementById('naRuaAgora').innerHTML = ruaEntries.length
+                ? ruaEntries.map(([nome, qty]) =>
+                    `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);">
+                        <span style="font-size:13px;color:#374151;">${nome}</span>
+                        <span style="font-size:15px;font-weight:800;color:#003366;background:#e0edff;padding:2px 12px;border-radius:20px;">${qty} un.</span>
+                    </div>`).join('')
+                : '<div class="empty-state">Nenhum item em campo no momento</div>';
+
+            // ---- Dados mensais (últimos 6 meses) ----
+            const meses = [];
+            for (let i = 5; i >= 0; i--) {
+                const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - i);
+                meses.push({ label: d.toLocaleString('pt-BR', {month:'short', year:'2-digit'}), mes: d.getMonth(), ano: d.getFullYear(), receita: 0, qtd: 0 });
+            }
+            orders.forEach(o => {
+                const d = new Date(o.createdAt);
+                const m = meses.find(x => x.mes === d.getMonth() && x.ano === d.getFullYear());
+                if (m) { m.receita += Number(o.total) || 0; m.qtd++; }
+            });
+            const labels = meses.map(m => m.label);
+            const palette = ['#003366','#1a5fa8','#2d7dd2','#5ea8f5','#8ec9ff','#b8deff'];
+
+            // ---- Gráfico: Receita por mês ----
+            criarGrafico('chartReceita', {
+                type: 'bar',
+                data: {
+                    labels,
+                    datasets: [{
+                        label: 'Receita (R$)',
+                        data: meses.map(m => m.receita),
+                        backgroundColor: palette,
+                        borderRadius: 6,
+                        borderSkipped: false,
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ' ' + fmt(ctx.raw) } } },
+                    scales: {
+                        y: { ticks: { callback: v => 'R$' + (v >= 1000 ? (v/1000).toFixed(0)+'k' : v), font:{size:10} }, grid: { color:'#f0f4f8' } },
+                        x: { ticks: { font:{size:10} }, grid: { display:false } }
+                    }
+                }
+            });
+
+            // ---- Gráfico: Pedidos por mês ----
+            criarGrafico('chartPedidosMes', {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [{
+                        label: 'Pedidos',
+                        data: meses.map(m => m.qtd),
+                        borderColor: '#003366',
+                        backgroundColor: 'rgba(0,51,102,0.1)',
+                        tension: 0.4,
+                        fill: true,
+                        pointBackgroundColor: '#003366',
+                        pointRadius: 5,
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: { beginAtZero: true, ticks: { stepSize: 1, font:{size:10} }, grid: { color:'#f0f4f8' } },
+                        x: { ticks: { font:{size:10} }, grid: { display:false } }
+                    }
+                }
+            });
+
+            // ---- Agregação por produto ----
+            const prodQtd = {}, prodRec = {};
+            orders.forEach(o => {
+                (o.items || []).forEach(i => {
+                    prodQtd[i.name] = (prodQtd[i.name] || 0) + (Number(i.qty) || 0);
+                    prodRec[i.name] = (prodRec[i.name] || 0) + (Number(i.price) * Number(i.qty) || 0);
+                });
+            });
+            const topProd = Object.entries(prodQtd).sort((a,b) => b[1]-a[1]).slice(0,8);
+            const topRec  = Object.entries(prodRec).sort((a,b) => b[1]-a[1]).slice(0,8);
+
+            // ---- Gráfico: Produtos mais alugados (qty) ----
+            criarGrafico('chartProdutos', {
+                type: 'bar',
+                data: {
+                    labels: topProd.map(([n]) => n),
+                    datasets: [{
+                        label: 'Quantidade',
+                        data: topProd.map(([,q]) => q),
+                        backgroundColor: '#1a5fa8',
+                        borderRadius: 5,
+                        borderSkipped: false,
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { beginAtZero: true, ticks: { stepSize:1, font:{size:10} }, grid:{ color:'#f0f4f8' } },
+                        y: { ticks: { font:{size:10} }, grid:{ display:false } }
+                    }
+                }
+            });
+
+            // ---- Gráfico: Receita por produto ----
+            criarGrafico('chartReceitaProd', {
+                type: 'bar',
+                data: {
+                    labels: topRec.map(([n]) => n),
+                    datasets: [{
+                        label: 'Receita (R$)',
+                        data: topRec.map(([,v]) => v),
+                        backgroundColor: '#16a34a',
+                        borderRadius: 5,
+                        borderSkipped: false,
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ' ' + fmt(ctx.raw) } } },
+                    scales: {
+                        x: { ticks: { callback: v => 'R$' + (v>=1000?(v/1000).toFixed(0)+'k':v), font:{size:10} }, grid:{ color:'#f0f4f8' } },
+                        y: { ticks: { font:{size:10} }, grid:{ display:false } }
+                    }
+                }
+            });
+
+            // ---- Lista pedidos por vencimento ----
             const ordenados = [...orders].sort((a, b) => {
                 const da = new Date(a.endDate || a.startDate || a.createdAt);
                 const db = new Date(b.endDate || b.startDate || b.createdAt);
                 return da - db;
             });
-
-            const hoje = new Date(); hoje.setHours(0,0,0,0);
             let html = ordenados.map(o => {
-                const venc = o.endDate ? new Date(o.endDate + 'T00:00:00') : null;
+                const vencD = o.endDate ? new Date(o.endDate + 'T00:00:00') : null;
                 let vencInfo = '';
-                if (venc) {
-                    const diff = Math.round((venc - hoje) / (1000*60*60*24));
+                if (vencD) {
+                    const diff = Math.round((vencD - hoje) / (1000*60*60*24));
                     if (o.status !== 'devolvido') {
-                        if (diff < 0) vencInfo = `<span style="color:#dc2626;font-weight:700;">⚠️ Venceu há ${Math.abs(diff)} dia(s)</span>`;
+                        if (diff < 0) vencInfo = `<span style="color:#dc2626;font-weight:700;">⚠️ Venceu há ${Math.abs(diff)}d</span>`;
                         else if (diff === 0) vencInfo = `<span style="color:#dc2626;font-weight:700;">⚠️ Vence hoje</span>`;
-                        else if (diff <= 3) vencInfo = `<span style="color:#f59e0b;font-weight:700;">Vence em ${diff} dia(s)</span>`;
-                        else vencInfo = `<span style="color:#16a34a;">Vence em ${diff} dia(s)</span>`;
-                    } else {
-                        vencInfo = '<span style="color:#16a34a;">Concluído</span>';
-                    }
+                        else if (diff <= 3) vencInfo = `<span style="color:#f59e0b;font-weight:700;">Vence em ${diff}d</span>`;
+                        else vencInfo = `<span style="color:#16a34a;">Vence em ${diff}d</span>`;
+                    } else { vencInfo = '<span style="color:#16a34a;">✓ Concluído</span>'; }
                 }
                 const itensResumo = (o.items || []).map(i => `${i.qty}× ${i.name}`).join(' · ');
                 return `
                 <div onclick="openOrderDetail('${o.id}')" style="cursor:pointer;padding:14px;background:#fff;border:1px solid var(--line);border-radius:12px;margin-bottom:10px;border-left:5px solid ${statusColor(o.status)};box-shadow:0 1px 4px rgba(16,32,56,.05)">
                     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
-                        <div>
-                            <p style="font-size:14px;font-weight:700;color:var(--navy);margin:0">${o.clientName}</p>
-                            <p style="font-size:11px;color:#8b95a3;margin:2px 0">${o.id}</p>
-                        </div>
-                        <div style="text-align:right;">
-                            <p style="font-size:15px;font-weight:800;color:var(--navy);margin:0">${fmt(o.total)}</p>
-                            <p style="font-size:11px;margin:2px 0">${statusLabel(o.status)}</p>
-                        </div>
+                        <div><p style="font-size:14px;font-weight:700;color:var(--navy);margin:0">${o.clientName}</p><p style="font-size:11px;color:#8b95a3;margin:2px 0">${o.id}</p></div>
+                        <div style="text-align:right;"><p style="font-size:15px;font-weight:800;color:var(--navy);margin:0">${fmt(o.total)}</p><p style="font-size:11px;margin:2px 0">${statusLabel(o.status)}</p></div>
                     </div>
                     <p style="font-size:12px;color:#4b5563;margin:8px 0 4px">📦 ${itensResumo || '—'}</p>
                     <p style="font-size:12px;color:#4b5563;margin:4px 0">📍 ${o.rentalAddress || '—'}${o.rentalCEP ? ' · CEP ' + o.rentalCEP : ''}</p>
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;font-size:11px;">
-                        <span style="color:#6b7280;">Retirada ${dataBR(o.startDate)} → Devolução ${dataBR(o.endDate)}</span>
+                        <span style="color:#6b7280;">Retirada ${dataBR(o.startDate)} → Dev. ${dataBR(o.endDate)}</span>
                         ${vencInfo}
                     </div>
                     <p style="font-size:11px;color:var(--navy);margin:8px 0 0;font-weight:600;">Toque para ver detalhes →</p>
@@ -1590,6 +1780,15 @@
                         <button class="btn btn-secondary btn-small" style="width:100%;" onclick="mudarStatus('${o.id}','retirado')">🔵 Retirado</button>
                         <button class="btn btn-secondary btn-small" style="width:100%;" onclick="mudarStatus('${o.id}','devolvido')">🟢 Devolvido</button>
                     </div>
+                </div>` : '';
+
+            const delFn = o.status === 'orcamento' ? `deletarOrcamento('${o.id}')` : `deletarPedido('${o.id}')`;
+            const delLabel = o.status === 'orcamento' ? 'Orçamento' : 'Pedido';
+            const adminDelSection = (currentUser && currentUser.isAdmin) ? `
+                <div class="card" style="border:1px solid #fca5a5;background:#fff5f5;">
+                    <h2 style="color:#dc2626;">⚠️ Zona de Perigo</h2>
+                    <p style="font-size:12px;color:#6b7280;margin-bottom:10px;">Esta ação é permanente e não pode ser desfeita.</p>
+                    <button class="btn btn-small" style="background:#dc2626;width:100%;" onclick="${delFn}">🗑️ Excluir ${delLabel}</button>
                 </div>` : '';
 
             document.getElementById('orderDetailContent').innerHTML = `
@@ -1636,7 +1835,8 @@
                                <button class="btn btn-small" style="width:100%;" onclick="reimprimir('${o.id}','contrato')">📄 Baixar Contrato</button>`}
                     </div>
                     <button class="btn btn-secondary btn-small" style="width:100%;margin-top:8px;" onclick="reimprimir('${o.id}','whatsapp')">💬 Ver texto WhatsApp</button>
-                </div>`;
+                </div>
+                ${adminDelSection}`;
 
             showOnly('orderDetail');
         }
@@ -1651,6 +1851,30 @@
             document.querySelectorAll('.tab').forEach(e => e.classList.remove('active'));
             const dashTab = document.querySelector('.tab'); if (dashTab) dashTab.classList.add('active');
             updateDashboard();
+        }
+
+        function deletarPedido(id) {
+            if (!currentUser || !currentUser.isAdmin) return;
+            if (!confirm('Excluir este pedido permanentemente? Esta ação não pode ser desfeita.')) return;
+            orders = orders.filter(o => o.id !== id);
+            save(); updateDashboard(); renderHistorico();
+            voltarDashboard();
+        }
+
+        function deletarOrcamento(id) {
+            if (!currentUser || !currentUser.isAdmin) return;
+            if (!confirm('Excluir este orçamento permanentemente?')) return;
+            orcamentos = orcamentos.filter(o => o.id !== id);
+            save(); renderHistorico();
+        }
+
+        function deletarCliente(idx) {
+            if (!currentUser || !currentUser.isAdmin) return;
+            const c = mockClientes[idx];
+            if (!c) return;
+            if (!confirm(`Excluir o cliente "${c.name}"? Esta ação não pode ser desfeita.`)) return;
+            mockClientes.splice(idx, 1);
+            save(); renderClientsList();
         }
         function mudarStatus(id, novo) {
             const o = orders.find(x => x.id === id);
@@ -1687,6 +1911,11 @@
                     ? `<button class="btn btn-secondary btn-small" onclick="reimprimir('${o.id}','orcamento')">📄 PDF Orçamento</button>`
                     : `<button class="btn btn-secondary btn-small" onclick="reimprimir('${o.id}','pedido')">📄 PDF Pedido</button>
                        <button class="btn btn-secondary btn-small" onclick="reimprimir('${o.id}','contrato')">📄 Contrato</button>`;
+                const btnDel = (currentUser && currentUser.isAdmin)
+                    ? (o._tipo === 'orcamento'
+                        ? `<button class="btn btn-small" style="background:#dc2626;width:auto;padding:6px 12px;" onclick="event.stopPropagation();deletarOrcamento('${o.id}')">🗑️ Excluir</button>`
+                        : `<button class="btn btn-small" style="background:#dc2626;width:auto;padding:6px 12px;" onclick="event.stopPropagation();deletarPedido('${o.id}')">🗑️ Excluir</button>`)
+                    : '';
                 return `<div style="padding:14px;background:#fff;border:1px solid var(--line);border-radius:10px;margin-bottom:10px;border-left:4px solid ${statusColor(o.status)}">
                     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
                         <div>
@@ -1697,7 +1926,7 @@
                     </div>
                     <p style="font-size:11px;color:#4b5563;margin:6px 0 2px;">📦 ${itensTexto}</p>
                     <p style="font-size:11px;color:#6b7280;margin:2px 0;">📅 ${dataBR(o.startDate)} → ${dataBR(o.endDate)}</p>
-                    <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;">${btnsPDF}</div>
+                    <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;">${btnsPDF}${btnDel}</div>
                 </div>`;
             }).join('');
             document.getElementById('historicoList').innerHTML = html || '<div class="empty-state">Nenhum pedido ou orçamento</div>';
