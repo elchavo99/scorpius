@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
-<head>
+<head>tipoLocacao
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Scorpius - Sistema de Pedidos</title>
@@ -623,12 +623,24 @@
                             <div class="form-group"><label>Cidade</label><input type="text" id="rentalCidade" placeholder="São Paulo"></div>
                         </div>
 
+                        <div class="form-group">
+                            <label>Tipo de Locação</label>
+                            <select id="tipoLocacao" onchange="onTipoLocacaoChange()">
+                                <option value="">Selecione...</option>
+                                <option value="Diária">Diária</option>
+                                <option value="3 dias">3 dias</option>
+                                <option value="Semanal">Semanal</option>
+                                <option value="Quinzenal">Quinzenal</option>
+                                <option value="Mensal">Mensal</option>
+                                <option value="Outros">Outros</option>
+                            </select>
+                        </div>
                         <div class="form-group" style="margin-bottom:8px;margin-top:4px;">
                             <label>Período (preenche a devolução automaticamente)</label>
                             <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px;">
-                                <button type="button" class="btn btn-secondary btn-small" style="width:100%;" onclick="aplicarPeriodo(7)">Semanal</button>
-                                <button type="button" class="btn btn-secondary btn-small" style="width:100%;" onclick="aplicarPeriodo(15)">Quinzenal</button>
-                                <button type="button" class="btn btn-secondary btn-small" style="width:100%;" onclick="aplicarPeriodo(30)">Mensal</button>
+                                <button type="button" class="btn btn-secondary btn-small" style="width:100%;" onclick="aplicarPeriodo(7,'Semanal')">Semanal</button>
+                                <button type="button" class="btn btn-secondary btn-small" style="width:100%;" onclick="aplicarPeriodo(15,'Quinzenal')">Quinzenal</button>
+                                <button type="button" class="btn btn-secondary btn-small" style="width:100%;" onclick="aplicarPeriodo(30,'Mensal')">Mensal</button>
                             </div>
                         </div>
                         <div class="grid-2">
@@ -1240,7 +1252,7 @@
         }
 
         let periodoAtivo = null; // guarda quantos dias pra reaplicar se mudar a data início
-        function aplicarPeriodo(dias) {
+        function aplicarPeriodo(dias, tipo) {
             const ini = document.getElementById('startDate').value;
             if (!ini) {
                 document.getElementById('alertEntrega').innerHTML = '<div class="alert-error">⚠️ Preencha a Data de Início (retirada) primeiro.</div>';
@@ -1251,10 +1263,20 @@
             d.setDate(d.getDate() + dias);
             document.getElementById('endDate').value = d.toISOString().slice(0, 10);
             document.getElementById('alertEntrega').innerHTML = '';
+            if (tipo) document.getElementById('tipoLocacao').value = tipo;
         }
         function reaplicarPeriodo() {
             // se o usuário escolheu um período e mudou a data início, recalcula a devolução a partir da nova data início
-            if (periodoAtivo) aplicarPeriodo(periodoAtivo);
+            if (periodoAtivo) aplicarPeriodo(periodoAtivo, document.getElementById('tipoLocacao').value);
+        }
+        function onTipoLocacaoChange() {
+            // Se o usuário escolher manualmente Semanal/Quinzenal/Mensal no dropdown,
+            // aplica o mesmo cálculo automático de data de devolução dos botões rápidos.
+            const tipo = document.getElementById('tipoLocacao').value;
+            const dias = { 'Semanal': 7, 'Quinzenal': 15, 'Mensal': 30 }[tipo];
+            if (dias && document.getElementById('startDate').value) {
+                aplicarPeriodo(dias, tipo);
+            }
         }
 
         function refreshProdutos() {
@@ -1393,6 +1415,7 @@
                 rentalAddress: rentalAddress,
                 startDate: startDate,
                 endDate: endDate,
+                tipoLocacao: document.getElementById('tipoLocacao').value,
                 notes: document.getElementById('orderNotes').value,
                 total: sub + fr - dis,
                 frete: fr,
@@ -1429,7 +1452,8 @@
                 cartItems = [];
                 selectedClient = null;
                 periodoAtivo = null;
-                ['rentalRua', 'rentalCEP', 'rentalBairro', 'rentalCidade', 'startDate', 'endDate', 'orderNotes', 'freight', 'discount'].forEach(id => document.getElementById(id).value = '');
+                ['rentalRua', 'rentalCEP', 'rentalBairro', 'rentalCidade', 'startDate', 'endDate', 'tipoLocacao', 'orderNotes', 'freight', 'discount'].forEach(id => document.getElementById(id).value = '');
+                periodoAtivo = null;
                 document.getElementById('selectedClientName').textContent = 'Nenhum cliente selecionado';
                 document.getElementById('selectedClientInfo').style.display = 'none';
                 document.getElementById('selectedClientInfo').innerHTML = '';
@@ -1524,6 +1548,7 @@
                 kv('Endereço:', o.rentalAddress);
                 kv('CEP:', o.rentalCEP);
                 kv('Período:', dataBR(o.startDate)+' → '+dataBR(o.endDate)+' ('+diasEntre(o.startDate,o.endDate)+' dias)');
+                if (o.tipoLocacao) kv('Tipo de Locação:', o.tipoLocacao);
                 if (o.notes) { chk(6); kv('Obs.:', o.notes); }
                 y+=2;
 
