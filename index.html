@@ -662,6 +662,26 @@
                         <div id="selectedClientInfo" style="display:none;background:#f0f6ff;border-radius:8px;padding:10px;margin-top:8px;font-size:12px;color:#444;border-left:3px solid #003366;line-height:1.8;"></div>
                     </div>
                     
+                    <div class="card">
+                        <h2>🗓️ Locação</h2>
+                        <p style="font-size:11px;color:#6b7280;margin:-4px 0 10px;">Escolha o tipo de locação antes de adicionar os produtos — o preço de cada item já vem calculado pra esse período</p>
+                        <div class="grid-2">
+                            <div class="form-group"><label>Data do Pedido</label><input type="date" id="dataPedido"><small style="color:#8b95a3;font-size:10px;">quando o negócio foi fechado — pode ser diferente da entrega</small></div>
+                            <div class="form-group">
+                                <label>Tipo de Locação</label>
+                                <select id="tipoLocacao" onchange="onTipoLocacaoChange()">
+                                    <option value="">Selecione...</option>
+                                    <option value="Diária">Diária</option>
+                                    <option value="3 dias">3 dias (preço a combinar)</option>
+                                    <option value="Semanal">Semanal</option>
+                                    <option value="Quinzenal">Quinzenal</option>
+                                    <option value="Mensal">Mensal</option>
+                                    <option value="Outros">Outros (preço a combinar)</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="card"><h2>📦 Produtos</h2>
                         <button id="refreshProdBtn" class="btn btn-secondary btn-small" style="width:100%; margin-bottom:10px;" onclick="refreshProdutos()">🔄 Atualizar produtos do Sheets</button>
                         <div id="productsList"></div>
@@ -695,18 +715,6 @@
                             <div class="form-group"><label>Cidade</label><input type="text" id="rentalCidade" placeholder="São Paulo"></div>
                         </div>
 
-                        <div class="form-group">
-                            <label>Tipo de Locação</label>
-                            <select id="tipoLocacao" onchange="onTipoLocacaoChange()">
-                                <option value="">Selecione...</option>
-                                <option value="Diária">Diária</option>
-                                <option value="3 dias">3 dias</option>
-                                <option value="Semanal">Semanal</option>
-                                <option value="Quinzenal">Quinzenal</option>
-                                <option value="Mensal">Mensal</option>
-                                <option value="Outros">Outros</option>
-                            </select>
-                        </div>
                         <div class="form-group" style="margin-bottom:8px;margin-top:4px;">
                             <label>Período (preenche a devolução automaticamente)</label>
                             <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px;">
@@ -716,7 +724,7 @@
                             </div>
                         </div>
                         <div class="grid-2">
-                            <div class="form-group"><label>Data Início (retirada)</label><input type="date" id="startDate" onchange="reaplicarPeriodo()"><small style="color:#8b95a3;font-size:10px;">dia/mês/ano</small></div>
+                            <div class="form-group"><label>Data de Entrega</label><input type="date" id="startDate" onchange="reaplicarPeriodo()"><small style="color:#8b95a3;font-size:10px;">dia/mês/ano</small></div>
                             <div class="form-group"><label>Data Devolução</label><input type="date" id="endDate"><small style="color:#8b95a3;font-size:10px;">dia/mês/ano</small></div>
                         </div>
                         <div class="form-group"><label>Observações</label><textarea id="orderNotes" placeholder="..."></textarea></div>
@@ -957,6 +965,11 @@
             if (tab === 'entregas') renderEntregas();
             if (tab === 'mapa') renderMapa();
             if (tab === 'retiras') renderRetiras();
+            if (tab === 'pedido') {
+                const dp = document.getElementById('dataPedido');
+                if (dp && !dp.value) dp.value = toISO(new Date());
+                renderProductsList();
+            }
         }
         
         function renderAdminPanel() {
@@ -1351,6 +1364,50 @@
             if (dias && document.getElementById('startDate').value) {
                 aplicarPeriodo(dias, tipo);
             }
+            // Atualiza os preços exibidos na lista de produtos conforme o tipo escolhido
+            renderProductsList();
+            // Recalcula o preço dos itens já no carrinho, quando o produto tiver preço definido pra esse tipo
+            if (cartItems.length) {
+                let algumAjustado = false;
+                cartItems.forEach(i => {
+                    const p = mockProducts.find(x => x.id === i.productId);
+                    if (!p) return;
+                    const novoPreco = precoPorTipo(p, tipo);
+                    if (novoPreco != null && novoPreco !== i.price) { i.price = novoPreco; algumAjustado = true; }
+                });
+                renderCart();
+                if (algumAjustado) {
+                    const alertEl = document.getElementById('alertEntrega');
+                    if (alertEl) {
+                        alertEl.innerHTML = '<div class="alert-success">✓ Preços do carrinho atualizados para "' + tipo + '"</div>';
+                        setTimeout(() => { alertEl.innerHTML = ''; }, 3000);
+                    }
+                }
+            }
+        }
+
+        // Devolve o preço do produto pro tipo de locação escolhido, ou null se precisa ser
+        // informado na hora (ex: "3 dias" e "Outros" não têm preço fixo cadastrado).
+        function precoPorTipo(produto, tipo) {
+            if (tipo === 'Diária') return produto.price != null ? Number(produto.price) : null;
+            if (tipo === 'Semanal') return produto.precoSemanal != null ? Number(produto.precoSemanal) : null;
+            if (tipo === 'Quinzenal') return produto.precoQuinzenal != null ? Number(produto.precoQuinzenal) : null;
+            if (tipo === 'Mensal') return produto.precoMensal != null ? Number(produto.precoMensal) : null;
+            return null; // "3 dias", "Outros" ou nenhum tipo selecionado ainda
+        }
+
+        // Converte uma linha vinda do Sheets (aba "produtos") no formato usado pelo app.
+        // Aceita tanto os nomes de coluna em português quanto em inglês.
+        function produtoFromSheetRow(p, i) {
+            const num = v => (v !== undefined && v !== null && v !== '') ? Number(v) : null;
+            return {
+                id: p.id || (i + 1),
+                name: p.name || p.nome || '',
+                price: num(p.price || p.preco) || 0,
+                precoSemanal: num(p.preco_semanal || p.precoSemanal),
+                precoQuinzenal: num(p.preco_quinzenal || p.precoQuinzenal),
+                precoMensal: num(p.preco_mensal || p.precoMensal),
+            };
         }
 
         function refreshProdutos() {
@@ -1359,11 +1416,7 @@
             syncToSheets('getProdutos', {})
                 .then(res => {
                     if (res && res.success && Array.isArray(res.data) && res.data.length) {
-                        mockProducts = res.data.map((p, i) => ({
-                            id: p.id || (i + 1),
-                            name: p.name || p.nome || '',
-                            price: Number(p.price || p.preco || 0)
-                        })).filter(p => p.name);
+                        mockProducts = res.data.map(produtoFromSheetRow).filter(p => p.name);
                         save();
                         renderProductsList();
                         alert('✓ ' + mockProducts.length + ' produtos atualizados do Sheets!');
@@ -1376,20 +1429,31 @@
         }
 
         function renderProductsList() {
-            document.getElementById('productsList').innerHTML = mockProducts.map(p => `
+            const tipo = document.getElementById('tipoLocacao') ? document.getElementById('tipoLocacao').value : '';
+            document.getElementById('productsList').innerHTML = mockProducts.map(p => {
+                const preco = precoPorTipo(p, tipo);
+                const precoTxt = preco != null
+                    ? 'R$ ' + preco.toFixed(2).replace('.', ',')
+                    : (tipo ? 'definir na hora' : 'selecione o tipo de locação acima');
+                return `
                 <div class="product-item">
                     <div>
                         <h3 style="font-size:13px;font-weight:600;color:var(--ink);">${p.name}</h3>
-                        <p class="price-tag">R$ ${p.price.toFixed(2).replace('.',',')}</p>
+                        <p class="price-tag" style="${preco == null ? 'color:#8b95a3;font-style:italic;font-size:11px;' : ''}">${precoTxt}</p>
                     </div>
-                    <button class="btn btn-small" style="width:34px;height:34px;padding:0;font-size:20px;line-height:1;border-radius:8px;display:flex;align-items:center;justify-content:center;" onclick="addToCart(${p.id}, '${p.name}', ${p.price})">+</button>
-                </div>
-            `).join('');
+                    <button class="btn btn-small" style="width:34px;height:34px;padding:0;font-size:20px;line-height:1;border-radius:8px;display:flex;align-items:center;justify-content:center;" onclick="addToCart(${p.id})">+</button>
+                </div>`;
+            }).join('');
         }
-        
-        function addToCart(pid, name, price) {
+
+        function addToCart(pid) {
+            const p = mockProducts.find(x => x.id === pid);
+            if (!p) return;
+            const tipo = document.getElementById('tipoLocacao') ? document.getElementById('tipoLocacao').value : '';
+            const preco = precoPorTipo(p, tipo);
             let i = cartItems.find(x => x.productId === pid);
-            if (i) i.qty++; else cartItems.push({productId: pid, name, price, qty: 1});
+            if (i) { i.qty++; }
+            else { cartItems.push({productId: pid, name: p.name, price: preco == null ? 0 : preco, qty: 1}); }
             renderCart();
         }
         
@@ -1397,12 +1461,15 @@
             if (cartItems.length === 0) { document.getElementById('cartItems').innerHTML = '<div class="empty-state">Nenhum produto</div>'; updateCartTotal(); return; }
             document.getElementById('cartItems').innerHTML = cartItems.map((i, idx) => `
                 <div style="padding:12px 0;border-bottom:1px solid var(--line);">
-                    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
-                        <div>
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;gap:8px;">
+                        <div style="flex:1;min-width:0;">
                             <div style="font-weight:700;font-size:14px;color:var(--navy);">${i.name}</div>
-                            <div style="font-size:12px;color:#6b7280;">R$ ${i.price.toFixed(2)} cada</div>
+                            <div style="display:flex;align-items:center;gap:4px;font-size:12px;color:#6b7280;margin-top:2px;">
+                                R$ <input type="number" step="0.01" min="0" value="${i.price}" style="width:70px;border:1px solid ${i.price ? '#ddd' : '#dc2626'};border-radius:6px;padding:3px 6px;font-size:12px;" oninput="cartItems[${idx}].price = parseFloat(this.value) || 0; document.getElementById('cartItemTotal${idx}').textContent = 'R$ ' + (cartItems[${idx}].price * cartItems[${idx}].qty).toFixed(2); updateCartTotal();"> cada
+                                ${!i.price ? '<span style="color:#dc2626;font-weight:600;">informe o valor</span>' : ''}
+                            </div>
                         </div>
-                        <div style="font-weight:700;font-size:15px;color:var(--navy);">R$ ${(i.price * i.qty).toFixed(2)}</div>
+                        <div id="cartItemTotal${idx}" style="font-weight:700;font-size:15px;color:var(--navy);white-space:nowrap;">R$ ${(i.price * i.qty).toFixed(2)}</div>
                     </div>
                     <div style="display:flex;align-items:center;gap:6px;">
                         <button onclick="updateQty(${idx}, ${i.qty - 1})" style="width:44px;height:44px;border-radius:8px;border:2px solid #003366;background:#fff;color:#003366;font-size:22px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;">−</button>
@@ -1489,6 +1556,7 @@
                 rentalAddress: rentalAddress,
                 startDate: startDate,
                 endDate: endDate,
+                dataPedido: document.getElementById('dataPedido').value || toISO(new Date()),
                 tipoLocacao: document.getElementById('tipoLocacao').value,
                 notes: document.getElementById('orderNotes').value,
                 total: sub + fr - dis,
@@ -1528,12 +1596,14 @@
                 periodoAtivo = null;
                 ['rentalRua', 'rentalCEP', 'rentalBairro', 'rentalCidade', 'startDate', 'endDate', 'tipoLocacao', 'orderNotes', 'freight', 'discount'].forEach(id => document.getElementById(id).value = '');
                 periodoAtivo = null;
+                document.getElementById('dataPedido').value = toISO(new Date());
                 document.getElementById('selectedClientName').textContent = 'Nenhum cliente selecionado';
                 document.getElementById('selectedClientInfo').style.display = 'none';
                 document.getElementById('selectedClientInfo').innerHTML = '';
                 document.getElementById('clienteRetira').checked = false;
                 document.getElementById('enderecoSection').style.display = 'block';
                 renderCart();
+                renderProductsList();
             } catch (e) {
                 console.error('❌ Erro:', e);
                 showErr('Erro: ' + e.message);
@@ -1905,11 +1975,7 @@
             }).catch(() => {});
             syncToSheets('getProdutos', {}).then(res => {
                 if (res && res.success && Array.isArray(res.data) && res.data.length) {
-                    mockProducts = res.data.map((p, i) => ({
-                        id: p.id || (i + 1),
-                        name: p.name || p.nome || '',
-                        price: Number(p.price || p.preco || 0)
-                    })).filter(p => p.name);
+                    mockProducts = res.data.map(produtoFromSheetRow).filter(p => p.name);
                     save();
                     renderProductsList();
                 }
@@ -2033,7 +2099,9 @@
                 meses.push({ label: d.toLocaleString('pt-BR', {month:'short', year:'2-digit'}), mes: d.getMonth(), ano: d.getFullYear(), receita: 0, qtd: 0 });
             }
             ordersFiltrados.forEach(o => {
-                const d = new Date(o.createdAt);
+                // Usa a Data do Pedido (quando o negócio foi fechado) pra agrupar por mês;
+                // pedidos antigos sem esse campo caem de volta na data de criação do registro.
+                const d = new Date((o.dataPedido || o.createdAt) + (o.dataPedido ? 'T00:00:00' : ''));
                 const m = meses.find(x => x.mes === d.getMonth() && x.ano === d.getFullYear());
                 if (m) {
                     m.receita += filtro === 'todos' ? (Number(o.total) || 0) : valorItensPorFiltro(o.items, filtro);
@@ -2255,8 +2323,9 @@
                 </div>
                 <div class="card">
                     <h2>Entrega</h2>
+                    ${o.dataPedido ? `<p style="margin:4px 0;font-size:13px;">🗓️ Pedido emitido em: <b>${dataBR(o.dataPedido)}</b>${o.tipoLocacao ? ' · ' + o.tipoLocacao : ''}</p>` : ''}
                     <p style="margin:4px 0;font-size:13px;">📍 ${o.rentalAddress || '—'}${o.rentalCEP ? ' · CEP ' + o.rentalCEP : ''}</p>
-                    <p style="margin:4px 0;font-size:13px;">📅 Retirada: <b>${dataBR(o.startDate)}</b></p>
+                    <p style="margin:4px 0;font-size:13px;">📅 Entrega: <b>${dataBR(o.startDate)}</b></p>
                     <p style="margin:4px 0;font-size:13px;">📅 Devolução: <b>${dataBR(o.endDate)}</b> (${dias} dia${dias > 1 ? 's' : ''})</p>
                     ${o.notes ? `<p style="margin:8px 0 0;font-size:13px;color:#4b5563;">📝 ${o.notes}</p>` : ''}
                 </div>
