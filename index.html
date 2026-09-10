@@ -506,6 +506,7 @@
                 <li><button class="tab active" onclick="switchTab('dashboard', this)">📊 Dashboard</button></li>
                 <li><button class="tab" onclick="switchTab('entregas', this)">🚛 Entregas</button></li>
                 <li><button class="tab" onclick="switchTab('mapa', this)">🗺️ Mapa</button></li>
+                <li><button class="tab" onclick="switchTab('retiras', this)">📅 Retiras</button></li>
                 <li><button class="tab" onclick="switchTab('pedido', this)">➕ Pedido / Orçamento</button></li>
                 <li><button class="tab" onclick="switchTab('clientes', this)">👥 Clientes</button></li>
                 <li><button class="tab" onclick="switchTab('historico', this)">📈 Histórico</button></li>
@@ -614,6 +615,20 @@
                         <div id="mapaStatus" style="font-size:12px;color:#6b7280;margin-bottom:8px;"></div>
                         <div id="mapaContainer" style="height:65vh;min-height:380px;border-radius:12px;overflow:hidden;border:1px solid var(--line);"></div>
                         <div id="mapaSemEndereco" style="margin-top:10px;"></div>
+                    </div>
+                </div>
+
+                <!-- RETIRAS -->
+                <div id="retiras" class="content-section">
+                    <div class="card">
+                        <h2>📅 Calendário de Retiradas</h2>
+                        <p style="font-size:11px;color:#6b7280;margin:-4px 0 10px;">Andaimes em campo (🔵 Retirado) por dia de devolução prevista — próximos 2 meses, semana de domingo a sábado</p>
+                        <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:10px;font-size:11px;color:#4b5563;">
+                            <span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#f5b400;margin-right:4px;"></span>A retirar</span>
+                            <span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#dc2626;margin-right:4px;"></span>Atrasado</span>
+                            <span><span style="display:inline-block;width:10px;height:10px;border:2px solid #003366;border-radius:3px;margin-right:4px;"></span>Hoje</span>
+                        </div>
+                        <div id="retirasCalendario"></div>
                     </div>
                 </div>
 
@@ -925,6 +940,7 @@
             if (tab === 'historico') renderHistorico();
             if (tab === 'entregas') renderEntregas();
             if (tab === 'mapa') renderMapa();
+            if (tab === 'retiras') renderRetiras();
         }
         
         function renderAdminPanel() {
@@ -2353,6 +2369,66 @@
             document.getElementById('listaARetirar').innerHTML = aRetirar.length
                 ? ordenarComVerificarPrimeiro(aRetirar, 'endDate').map(o => cardEntrega(o, 'endDate', 'Vencimento')).join('')
                 : '<div class="empty-state">Nenhum andaime em campo no momento</div>';
+        }
+
+        // ===== CALENDARIO DE RETIRADAS =====
+        function pad2(n) { return n < 10 ? '0' + n : '' + n; }
+        function toISO(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
+
+        function buildMonthCalendar(year, month, retiradasPorDia, hojeISO) {
+            const nomesMes = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+            const primeiroDia = new Date(year, month, 1);
+            const ultimoDia = new Date(year, month + 1, 0);
+            const diasNoMes = ultimoDia.getDate();
+            const diaSemanaInicio = primeiroDia.getDay(); // 0 = domingo
+            let html = `<div style="margin-bottom:24px;">`;
+            html += `<h3 style="font-size:14px;color:#003366;margin-bottom:8px;">${nomesMes[month]} ${year}</h3>`;
+            html += `<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;">`;
+            ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'].forEach(d => {
+                html += `<div style="font-size:10px;font-weight:700;color:#6b7280;text-align:center;padding:4px 0;">${d}</div>`;
+            });
+            for (let i = 0; i < diaSemanaInicio; i++) html += `<div></div>`;
+            for (let dia = 1; dia <= diasNoMes; dia++) {
+                const iso = toISO(new Date(year, month, dia));
+                const pedidos = retiradasPorDia[iso] || [];
+                const isHoje = iso === hojeISO;
+                const isAtrasado = iso < hojeISO;
+                let bg = '#fff', border = '1px solid var(--line, #e2e8f0)';
+                if (pedidos.length) {
+                    bg = isAtrasado ? '#fdecec' : '#fff8e6';
+                    border = isAtrasado ? '1px solid #dc2626' : '1px solid #f5b400';
+                }
+                if (isHoje) border = '2px solid #003366';
+                html += `<div style="min-height:62px;border:${border};border-radius:8px;background:${bg};padding:4px;font-size:10px;">
+                    <div style="font-weight:700;color:${isHoje ? '#003366' : '#374151'};">${dia}</div>
+                    ${pedidos.map(o => `<div onclick="openOrderDetail('${o.id}')" title="${o.clientName} — ${o.id}" style="margin-top:2px;padding:1px 4px;border-radius:4px;background:${isAtrasado ? '#dc2626' : '#f5b400'};color:#fff;font-size:9px;font-weight:600;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${o.clientName}</div>`).join('')}
+                </div>`;
+            }
+            html += `</div></div>`;
+            return html;
+        }
+
+        function renderRetiras() {
+            const container = document.getElementById('retirasCalendario');
+            if (!container) return;
+            const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+            const hojeISO = toISO(hoje);
+            const emCampo = orders.filter(o => o.status === 'retirado');
+            const retiradasPorDia = {};
+            emCampo.filter(o => o.endDate).forEach(o => {
+                if (!retiradasPorDia[o.endDate]) retiradasPorDia[o.endDate] = [];
+                retiradasPorDia[o.endDate].push(o);
+            });
+            let html = '';
+            for (let i = 0; i < 2; i++) {
+                const d = new Date(hoje.getFullYear(), hoje.getMonth() + i, 1);
+                html += buildMonthCalendar(d.getFullYear(), d.getMonth(), retiradasPorDia, hojeISO);
+            }
+            const semData = emCampo.filter(o => !o.endDate);
+            if (semData.length) {
+                html += `<p style="font-size:12px;color:#8b95a3;margin-top:4px;">🔍 ${semData.length} pedido(s) em campo sem data de devolução definida: ${semData.map(o => o.id).join(', ')}</p>`;
+            }
+            container.innerHTML = html;
         }
 
         // ===== MAPA DE PEDIDOS =====
