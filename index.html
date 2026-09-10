@@ -510,6 +510,7 @@
                 <li><button class="tab" onclick="switchTab('pedido', this)">➕ Pedido / Orçamento</button></li>
                 <li><button class="tab" onclick="switchTab('clientes', this)">👥 Clientes</button></li>
                 <li><button class="tab" onclick="switchTab('historico', this)">📈 Histórico</button></li>
+                <li><button class="tab" onclick="switchTab('produtos', this)">📦 Produtos</button></li>
                 <li><button class="tab" onclick="switchTab('admin', this)" id="adminTab">⚙️ Admin</button></li>
             </ul>
         </div>
@@ -802,6 +803,19 @@
                 </div>
 
                 <!-- ADMIN -->
+                <div id="produtos" class="content-section">
+                    <div class="card">
+                        <h2>📦 Catálogo de Produtos</h2>
+                        <p style="font-size:11px;color:#6b7280;margin:-4px 0 12px;">Edite nome, tipo/variante, ordem de exibição e preços por período. Também pode editar direto na planilha do Sheets — clique em "Atualizar do Sheets" para trazer as mudanças pra cá.</p>
+                        <div style="display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap;">
+                            <button id="refreshProdBtn2" class="btn btn-secondary btn-small" onclick="refreshProdutos()">🔄 Atualizar do Sheets</button>
+                            <button id="saveProdBtn" class="btn btn-small" style="width:auto;" onclick="salvarProdutosNoSheets()">💾 Salvar alterações no Sheets</button>
+                            <button class="btn btn-secondary btn-small" onclick="adicionarNovoProduto()">➕ Novo produto</button>
+                        </div>
+                        <div id="produtosAdminList"></div>
+                    </div>
+                </div>
+
                 <div id="admin" class="content-section">
                     <div class="card" style="background: #fff3cd; border: 2px solid #ffc107;">
                         <h3 style="color: #856404; margin-bottom: 12px;">⚙️ Painel de Administração</h3>
@@ -832,11 +846,11 @@
         let currentUser = null;
         let mockClientes = [];
         let mockProducts = [
-            {id: 1, name: 'Andaime Tubular 1.20m', price: 50},
-            {id: 2, name: 'Andaime Tubular 1.80m', price: 65},
-            {id: 3, name: 'Plataforma 1.20x1.20m', price: 120},
-            {id: 4, name: 'Proteção de Queda', price: 30},
-            {id: 5, name: 'Escada 5 degraus', price: 45}
+            {id: 1, name: 'Andaime Tubular 1.20m', price: 50, ordem: 1},
+            {id: 2, name: 'Andaime Tubular 1.80m', price: 65, ordem: 2},
+            {id: 3, name: 'Plataforma 1.20x1.20m', price: 120, ordem: 3},
+            {id: 4, name: 'Proteção de Queda', price: 30, ordem: 4},
+            {id: 5, name: 'Escada 5 degraus', price: 45, ordem: 5}
         ];
         let selectedClient = null;
         let editingClientIdx = null;
@@ -986,6 +1000,7 @@
             if (tab === 'entregas') renderEntregas();
             if (tab === 'mapa') renderMapa();
             if (tab === 'retiras') renderRetiras();
+            if (tab === 'produtos') renderProdutosAdmin();
             if (tab === 'pedido') {
                 const dp = document.getElementById('dataPedido');
                 if (dp && !dp.value) dp.value = toISO(new Date());
@@ -1421,6 +1436,7 @@
         // Aceita tanto os nomes de coluna em português quanto em inglês.
         function produtoFromSheetRow(p, i) {
             const num = v => (v !== undefined && v !== null && v !== '') ? Number(v) : null;
+            const ordem = num(p.ordem);
             return {
                 id: p.id || (i + 1),
                 name: p.name || p.nome || '',
@@ -1430,6 +1446,7 @@
                 precoMensal: num(p.preco_mensal || p.precoMensal),
                 tipo: (p.tipo || '').trim(),
                 variante: (p.variante || '').trim(),
+                ordem: ordem != null ? ordem : (i + 1),
             };
         }
 
@@ -1487,6 +1504,7 @@
                 if (!grupos[p.tipo]) grupos[p.tipo] = [];
                 grupos[p.tipo].push(p);
             });
+            Object.values(grupos).forEach(itens => itens.sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0)));
             const cardGrupo = (nomeGrupo, itens) => {
                 const aberto = _grupoProdutoAberto === nomeGrupo;
                 return `
@@ -1507,9 +1525,123 @@
                 </div>`;
             };
 
-            document.getElementById('productsList').innerHTML =
-                Object.keys(grupos).map(nome => cardGrupo(nome, grupos[nome])).join('') +
-                semGrupo.map(cardSolto).join('');
+            // Ordena a lista final (grupos + soltos) pela "ordem" — usa a menor ordem dos itens de cada grupo
+            const entradas = [
+                ...Object.keys(grupos).map(nome => ({ ordem: Math.min(...grupos[nome].map(p => p.ordem ?? 0)), html: cardGrupo(nome, grupos[nome]) })),
+                ...semGrupo.slice().sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0)).map(p => ({ ordem: p.ordem ?? 0, html: cardSolto(p) })),
+            ].sort((a, b) => a.ordem - b.ordem);
+
+            document.getElementById('productsList').innerHTML = entradas.map(e => e.html).join('');
+        }
+
+        // ===== ABA "PRODUTOS" (edição de catálogo — nome, tipo/variante, ordem e preços) =====
+        function renderProdutosAdmin() {
+            const lista = mockProducts.slice().sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0));
+            const campoNum = (p, campo, label) => `
+                <div class="form-group" style="margin-bottom:0;">
+                    <label style="font-size:10px;">${label}</label>
+                    <input type="number" step="0.01" min="0" value="${p[campo] != null ? p[campo] : ''}" placeholder="—"
+                        style="padding:6px 8px;font-size:12px;"
+                        oninput="editarCampoProduto(${p.id}, '${campo}', this.value, true)">
+                </div>`;
+            document.getElementById('produtosAdminList').innerHTML = lista.map((p, idx) => `
+                <div style="background:white;border:1px solid #ddd;border-radius:8px;padding:12px;margin-bottom:10px;">
+                    <div style="display:flex;gap:8px;align-items:flex-start;">
+                        <div style="display:flex;flex-direction:column;gap:2px;padding-top:4px;">
+                            <button class="btn btn-secondary btn-small" style="width:28px;height:24px;padding:0;font-size:11px;${idx === 0 ? 'opacity:.3;' : ''}" ${idx === 0 ? 'disabled' : ''} onclick="moverProdutoOrdem(${p.id}, -1)">▲</button>
+                            <button class="btn btn-secondary btn-small" style="width:28px;height:24px;padding:0;font-size:11px;${idx === lista.length - 1 ? 'opacity:.3;' : ''}" ${idx === lista.length - 1 ? 'disabled' : ''} onclick="moverProdutoOrdem(${p.id}, 1)">▼</button>
+                        </div>
+                        <div style="flex:1;min-width:0;">
+                            <div class="grid-2" style="margin-bottom:8px;">
+                                <div class="form-group" style="margin-bottom:0;">
+                                    <label style="font-size:10px;">Nome / Descrição</label>
+                                    <input type="text" value="${p.name || ''}" style="padding:6px 8px;font-size:12px;" oninput="editarCampoProduto(${p.id}, 'name', this.value)">
+                                </div>
+                                <div class="form-group" style="margin-bottom:0;">
+                                    <label style="font-size:10px;">Tipo (agrupa variantes — opcional)</label>
+                                    <input type="text" value="${p.tipo || ''}" placeholder="ex: Andaime" style="padding:6px 8px;font-size:12px;" oninput="editarCampoProduto(${p.id}, 'tipo', this.value)">
+                                </div>
+                            </div>
+                            <div class="form-group" style="margin-bottom:8px;">
+                                <label style="font-size:10px;">Variante (só se tiver Tipo)</label>
+                                <input type="text" value="${p.variante || ''}" placeholder="ex: 1,0m" style="padding:6px 8px;font-size:12px;" oninput="editarCampoProduto(${p.id}, 'variante', this.value)">
+                            </div>
+                            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;">
+                                ${campoNum(p, 'price', 'Diária (R$)')}
+                                ${campoNum(p, 'precoSemanal', 'Semanal (R$)')}
+                                ${campoNum(p, 'precoQuinzenal', 'Quinzenal (R$)')}
+                                ${campoNum(p, 'precoMensal', 'Mensal (R$)')}
+                            </div>
+                        </div>
+                        <button class="btn btn-secondary btn-small" style="width:30px;height:30px;padding:0;flex-shrink:0;" title="Remover produto" onclick="removerProduto(${p.id})">🗑️</button>
+                    </div>
+                </div>
+            `).join('') || '<div class="empty-state">Nenhum produto cadastrado</div>';
+        }
+
+        function editarCampoProduto(id, campo, valor, isNumero) {
+            const p = mockProducts.find(x => x.id === id);
+            if (!p) return;
+            p[campo] = isNumero ? (valor === '' ? null : parseFloat(valor)) : valor;
+            save();
+            // Reflete no card do rodapé de "Ordem" nada muda; só atualiza estado local, sem re-render pra não perder o foco do input
+        }
+
+        function moverProdutoOrdem(id, direcao) {
+            const lista = mockProducts.slice().sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0));
+            const idx = lista.findIndex(p => p.id === id);
+            const alvo = idx + direcao;
+            if (idx < 0 || alvo < 0 || alvo >= lista.length) return;
+            // Troca a "ordem" entre os dois produtos vizinhos
+            const a = lista[idx], b = lista[alvo];
+            const ordemA = a.ordem ?? idx, ordemB = b.ordem ?? alvo;
+            a.ordem = ordemB;
+            b.ordem = ordemA;
+            save();
+            renderProdutosAdmin();
+        }
+
+        function adicionarNovoProduto() {
+            const maxOrdem = mockProducts.reduce((m, p) => Math.max(m, p.ordem ?? 0), 0);
+            const tempId = -(Date.now()); // id negativo/temporário: o Sheets substitui por um id real ao salvar
+            mockProducts.push({ id: tempId, name: 'Novo produto', price: 0, precoSemanal: null, precoQuinzenal: null, precoMensal: null, tipo: '', variante: '', ordem: maxOrdem + 1 });
+            save();
+            renderProdutosAdmin();
+        }
+
+        function removerProduto(id) {
+            const p = mockProducts.find(x => x.id === id);
+            if (!p) return;
+            if (!confirm(`Remover "${p.name}" do catálogo? Isso também apaga a linha na planilha ao salvar.`)) return;
+            mockProducts = mockProducts.filter(x => x.id !== id);
+            save();
+            renderProdutosAdmin();
+            if (p.id > 0) {
+                // Produto já existia no Sheets: apaga a linha de lá também
+                syncToSheets('deleteProduto', { id: p.id }).catch(() => {});
+            }
+        }
+
+        function salvarProdutosNoSheets() {
+            const btn = document.getElementById('saveProdBtn');
+            if (btn) { btn.textContent = '⏳ Salvando...'; btn.disabled = true; }
+            syncToSheets('updateProdutos', { produtos: mockProducts })
+                .then(res => {
+                    if (res && res.success) {
+                        if (Array.isArray(res.data) && res.data.length) {
+                            // O Sheets devolve a lista atualizada (com ids reais pros produtos novos)
+                            mockProducts = res.data.map(produtoFromSheetRow).filter(p => p.name);
+                            save();
+                        }
+                        renderProdutosAdmin();
+                        renderProductsList();
+                        alert('✓ Produtos salvos no Sheets!');
+                    } else {
+                        alert('⚠️ Não foi possível salvar. Verifique se o Apps Script já tem a ação "updateProdutos" publicada.');
+                    }
+                })
+                .catch(() => alert('❌ Não consegui conectar ao Sheets para salvar os produtos.'))
+                .finally(() => { if (btn) { btn.textContent = '💾 Salvar alterações no Sheets'; btn.disabled = false; } });
         }
 
         function addToCart(pid) {
