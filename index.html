@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
-<head>tipoLocacao
+<head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Scorpius - Sistema de Pedidos</title>
@@ -9,6 +9,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         html, body { height: 100%; }
@@ -254,6 +256,22 @@
             font-size: 13px;
             border-bottom: 1px solid #ddd;
         }
+
+        .filtro-status-btn {
+            font-size: 12px;
+            font-weight: 600;
+            padding: 6px 12px;
+            border-radius: 20px;
+            border: 1px solid var(--line, #e2e8f0);
+            background: #fff;
+            color: #4b5563;
+            cursor: pointer;
+        }
+        .filtro-status-btn.active {
+            background: #003366;
+            border-color: #003366;
+            color: #fff;
+        }
         
         .order-status {
             background: #f0f8ff;
@@ -487,6 +505,7 @@
             <ul class="tabs">
                 <li><button class="tab active" onclick="switchTab('dashboard', this)">📊 Dashboard</button></li>
                 <li><button class="tab" onclick="switchTab('entregas', this)">🚛 Entregas</button></li>
+                <li><button class="tab" onclick="switchTab('mapa', this)">🗺️ Mapa</button></li>
                 <li><button class="tab" onclick="switchTab('pedido', this)">➕ Pedido / Orçamento</button></li>
                 <li><button class="tab" onclick="switchTab('clientes', this)">👥 Clientes</button></li>
                 <li><button class="tab" onclick="switchTab('historico', this)">📈 Histórico</button></li>
@@ -552,6 +571,12 @@
                     <!-- Pedidos por vencimento -->
                     <div class="card">
                         <h2>📋 Pedidos por Vencimento</h2>
+                        <div id="filtroVencimentoBar" style="display:flex;gap:6px;flex-wrap:wrap;margin:-4px 0 12px;">
+                            <button type="button" class="filtro-status-btn active" data-status="todos" onclick="filtrarVencimento('todos', this)">Todos</button>
+                            <button type="button" class="filtro-status-btn" data-status="a_retirar" onclick="filtrarVencimento('a_retirar', this)">🟡 A Retirar</button>
+                            <button type="button" class="filtro-status-btn" data-status="retirado" onclick="filtrarVencimento('retirado', this)">🔵 Retirado</button>
+                            <button type="button" class="filtro-status-btn" data-status="devolvido" onclick="filtrarVencimento('devolvido', this)">🟢 Devolvido</button>
+                        </div>
                         <div id="ultimosPedidos"></div>
                     </div>
                 </div>
@@ -573,6 +598,22 @@
                         <h2>📦 A Retirar</h2>
                         <p style="font-size:11px;color:#6b7280;margin:-4px 0 10px;">Andaimes em campo — ordenados por vencimento mais próximo</p>
                         <div id="listaARetirar"><div class="empty-state">Nenhum pedido em campo</div></div>
+                    </div>
+                </div>
+
+                <!-- MAPA -->
+                <div id="mapa" class="content-section">
+                    <div class="card">
+                        <h2>🗺️ Mapa de Pedidos Abertos</h2>
+                        <p style="font-size:11px;color:#6b7280;margin:-4px 0 10px;">Endereços de entrega de todos os pedidos não devolvidos (🟡 A Retirar · 🔵 Retirado)</p>
+                        <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:10px;font-size:11px;color:#4b5563;">
+                            <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#f5b400;margin-right:4px;"></span>A Retirar</span>
+                            <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#2563eb;margin-right:4px;"></span>Retirado</span>
+                            <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#dc2626;margin-right:4px;"></span>Vencido</span>
+                        </div>
+                        <div id="mapaStatus" style="font-size:12px;color:#6b7280;margin-bottom:8px;"></div>
+                        <div id="mapaContainer" style="height:65vh;min-height:380px;border-radius:12px;overflow:hidden;border:1px solid var(--line);"></div>
+                        <div id="mapaSemEndereco" style="margin-top:10px;"></div>
                     </div>
                 </div>
 
@@ -883,6 +924,7 @@
             if (tab === 'dashboard') updateDashboard();
             if (tab === 'historico') renderHistorico();
             if (tab === 'entregas') renderEntregas();
+            if (tab === 'mapa') renderMapa();
         }
         
         function renderAdminPanel() {
@@ -2035,7 +2077,22 @@
             });
 
             // ---- Lista pedidos por vencimento ----
-            const ordenados = [...orders].sort((a, b) => {
+            renderPedidosVencimento();
+        }
+
+        // Filtro de status da lista "Pedidos por Vencimento"
+        let filtroVencimento = 'todos';
+        function filtrarVencimento(status, btn) {
+            filtroVencimento = status;
+            document.querySelectorAll('#filtroVencimentoBar .filtro-status-btn').forEach(b => b.classList.remove('active'));
+            if (btn) btn.classList.add('active');
+            renderPedidosVencimento();
+        }
+
+        function renderPedidosVencimento() {
+            const hoje = new Date(); hoje.setHours(0,0,0,0);
+            const base = filtroVencimento === 'todos' ? orders : orders.filter(o => o.status === filtroVencimento);
+            const ordenados = [...base].sort((a, b) => {
                 const da = new Date(a.endDate || a.startDate || a.createdAt);
                 const db = new Date(b.endDate || b.startDate || b.createdAt);
                 return da - db;
@@ -2051,6 +2108,8 @@
                         else if (diff <= 3) vencInfo = `<span style="color:#f59e0b;font-weight:700;">Vence em ${diff}d</span>`;
                         else vencInfo = `<span style="color:#16a34a;">Vence em ${diff}d</span>`;
                     } else { vencInfo = '<span style="color:#16a34a;">✓ Concluído</span>'; }
+                } else if (o.status !== 'devolvido') {
+                    vencInfo = '<span style="color:#8b95a3;font-weight:700;">🔍 Verificar data</span>';
                 }
                 const itensResumo = (o.items || []).map(i => `${i.qty}× ${i.name}`).join(' · ');
                 return `
@@ -2068,7 +2127,7 @@
                     <p style="font-size:11px;color:var(--navy);margin:8px 0 0;font-weight:600;">Toque para ver detalhes →</p>
                 </div>`;
             }).join('');
-            document.getElementById('ultimosPedidos').innerHTML = html || '<div class="empty-state">Nenhum pedido ainda</div>';
+            document.getElementById('ultimosPedidos').innerHTML = html || '<div class="empty-state">Nenhum pedido neste filtro</div>';
         }
 
         // ===== DETALHE DO PEDIDO (tela cheia) =====
@@ -2260,6 +2319,8 @@
                     else if (diff === 0) badge = `<span style="background:#f59e0b;color:#fff;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700;">⚠️ Hoje</span>`;
                     else if (diff <= 3) badge = `<span style="background:#f59e0b;color:#fff;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700;">Em ${diff}d</span>`;
                     else badge = `<span style="background:#16a34a;color:#fff;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700;">Em ${diff}d</span>`;
+                } else {
+                    badge = `<span style="background:#8b95a3;color:#fff;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700;">🔍 Verificar</span>`;
                 }
                 const itens = (o.items || []).map(i => `${i.qty}x ${i.name}`).join(' · ');
                 return `<div onclick="openOrderDetail('${o.id}')" style="cursor:pointer;padding:14px;background:#fff;border:1px solid var(--line);border-radius:10px;margin-bottom:10px;border-left:4px solid ${statusColor(o.status)};">
@@ -2269,17 +2330,138 @@
                     </div>
                     <p style="font-size:12px;color:#4b5563;margin:3px 0;">📦 ${itens || '—'}</p>
                     <p style="font-size:12px;color:#4b5563;margin:3px 0;">📍 ${o.rentalAddress || '—'}</p>
-                    <p style="font-size:12px;color:#6b7280;margin:3px 0;">📅 ${urgLabel}: <b>${dataBR(o[dateField])}</b> &nbsp;·&nbsp; Devolução: <b>${dataBR(o.endDate)}</b></p>
+                    <p style="font-size:12px;color:#6b7280;margin:3px 0;">📅 ${urgLabel}: <b>${o[dateField] ? dataBR(o[dateField]) : 'não informada'}</b> &nbsp;·&nbsp; Devolução: <b>${dataBR(o.endDate)}</b></p>
                     <p style="font-size:12px;font-weight:700;color:var(--navy);margin:6px 0 0;">${fmt(o.total)}</p>
                 </div>`;
             }
 
+            // pedidos sem data de referência (verificar) sobem para o topo de cada lista
+            function ordenarComVerificarPrimeiro(lista, dateField) {
+                return [...lista].sort((a, b) => {
+                    const da = a[dateField] ? new Date(a[dateField] + 'T00:00:00') : null;
+                    const db = b[dateField] ? new Date(b[dateField] + 'T00:00:00') : null;
+                    if (!da && !db) return 0;
+                    if (!da) return -1;
+                    if (!db) return 1;
+                    return da - db;
+                });
+            }
+
             document.getElementById('listaAEntregar').innerHTML = aEntregar.length
-                ? aEntregar.map(o => cardEntrega(o, 'startDate', 'Entrega')).join('')
+                ? ordenarComVerificarPrimeiro(aEntregar, 'startDate').map(o => cardEntrega(o, 'startDate', 'Entrega')).join('')
                 : '<div class="empty-state">Nenhum pedido aguardando entrega</div>';
             document.getElementById('listaARetirar').innerHTML = aRetirar.length
-                ? aRetirar.map(o => cardEntrega(o, 'endDate', 'Vencimento')).join('')
+                ? ordenarComVerificarPrimeiro(aRetirar, 'endDate').map(o => cardEntrega(o, 'endDate', 'Vencimento')).join('')
                 : '<div class="empty-state">Nenhum andaime em campo no momento</div>';
+        }
+
+        // ===== MAPA DE PEDIDOS =====
+        let _leafletMap = null;
+        let _leafletMarkers = [];
+        function getGeocodeCache() {
+            try { return JSON.parse(localStorage.getItem('scorpius_geocode_cache') || '{}'); }
+            catch (e) { return {}; }
+        }
+        function saveGeocodeCache(cache) {
+            try { localStorage.setItem('scorpius_geocode_cache', JSON.stringify(cache)); } catch (e) {}
+        }
+        function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+        // Geocodifica um endereço via Nominatim (OpenStreetMap), com cache em localStorage.
+        async function geocodeEndereco(chave, cache) {
+            if (cache[chave] !== undefined) return cache[chave]; // pode ser null (já tentado e não encontrado)
+            const query = encodeURIComponent(chave + ', São Paulo, Brasil');
+            try {
+                const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${query}`, {
+                    headers: { 'Accept-Language': 'pt-BR' }
+                });
+                const data = await resp.json();
+                const resultado = (data && data[0]) ? { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) } : null;
+                cache[chave] = resultado;
+                saveGeocodeCache(cache);
+                return resultado;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        async function renderMapa() {
+            const container = document.getElementById('mapaContainer');
+            const statusEl = document.getElementById('mapaStatus');
+            const semEnderecoEl = document.getElementById('mapaSemEndereco');
+            if (!container) return;
+
+            if (!_leafletMap) {
+                _leafletMap = L.map('mapaContainer').setView([-23.7250, -46.6970], 12); // Grajaú, SP
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    maxZoom: 19,
+                    attribution: '© OpenStreetMap'
+                }).addTo(_leafletMap);
+            }
+            setTimeout(() => _leafletMap.invalidateSize(), 100);
+
+            _leafletMarkers.forEach(m => _leafletMap.removeLayer(m));
+            _leafletMarkers = [];
+
+            const abertos = orders.filter(o => o.status !== 'devolvido');
+            const comEndereco = abertos.filter(o => o.rentalAddress && o.rentalAddress.trim());
+            const semEndereco = abertos.filter(o => !o.rentalAddress || !o.rentalAddress.trim());
+
+            semEnderecoEl.innerHTML = semEndereco.length
+                ? `<p style="font-size:12px;color:#8b95a3;">🔍 ${semEndereco.length} pedido(s) aberto(s) sem endereço cadastrado: ${semEndereco.map(o => o.id).join(', ')}</p>`
+                : '';
+
+            if (!comEndereco.length) {
+                statusEl.textContent = 'Nenhum pedido aberto com endereço para exibir no mapa.';
+                return;
+            }
+
+            const cache = getGeocodeCache();
+            const hoje = new Date(); hoje.setHours(0,0,0,0);
+            const bounds = [];
+            let falhas = 0;
+
+            for (let i = 0; i < comEndereco.length; i++) {
+                const o = comEndereco[i];
+                statusEl.textContent = `Localizando endereços no mapa... (${i + 1}/${comEndereco.length})`;
+                const chave = `${o.rentalAddress}${o.rentalCEP ? ' - ' + o.rentalCEP : ''}`;
+                const jaEstavaEmCache = cache[chave] !== undefined;
+                const pos = await geocodeEndereco(chave, cache);
+                if (!jaEstavaEmCache) await sleep(1100); // respeita limite de 1 req/s do Nominatim
+
+                if (!pos) { falhas++; continue; }
+
+                let cor = '#f5b400'; // a_retirar
+                if (o.status === 'retirado') {
+                    cor = '#2563eb';
+                    if (o.endDate) {
+                        const d = new Date(o.endDate + 'T00:00:00');
+                        if (d < hoje) cor = '#dc2626'; // vencido
+                    }
+                }
+                const icon = L.divIcon({
+                    className: '',
+                    html: `<div style="width:18px;height:18px;border-radius:50%;background:${cor};border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4);"></div>`,
+                    iconSize: [18, 18], iconAnchor: [9, 9]
+                });
+                const marker = L.marker([pos.lat, pos.lng], { icon }).addTo(_leafletMap);
+                const itens = (o.items || []).map(it => `${it.qty}× ${it.name}`).join(' · ');
+                marker.bindPopup(`
+                    <div style="font-size:12px;min-width:180px;">
+                        <b>${o.clientName}</b><br>
+                        <span style="color:#6b7280;">${o.id} · ${statusLabel(o.status)}</span><br>
+                        📍 ${o.rentalAddress}${o.rentalCEP ? ' · CEP ' + o.rentalCEP : ''}<br>
+                        📦 ${itens || '—'}<br>
+                        📅 Devolução: ${dataBR(o.endDate)}<br>
+                        <a href="#" onclick="openOrderDetail('${o.id}');return false;" style="color:#003366;font-weight:600;">Ver detalhes →</a>
+                    </div>
+                `);
+                _leafletMarkers.push(marker);
+                bounds.push([pos.lat, pos.lng]);
+            }
+
+            if (bounds.length) _leafletMap.fitBounds(bounds, { padding: [30, 30], maxZoom: 15 });
+            statusEl.textContent = `${bounds.length} pedido(s) localizado(s) no mapa` + (falhas ? ` · ${falhas} endereço(s) não encontrado(s)` : '') + '.';
         }
 
         window.addEventListener('load', () => {
