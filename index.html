@@ -1428,6 +1428,8 @@
                 precoSemanal: num(p.preco_semanal || p.precoSemanal),
                 precoQuinzenal: num(p.preco_quinzenal || p.precoQuinzenal),
                 precoMensal: num(p.preco_mensal || p.precoMensal),
+                tipo: (p.tipo || '').trim(),
+                variante: (p.variante || '').trim(),
             };
         }
 
@@ -1449,13 +1451,26 @@
                 .finally(() => { if (btn) { btn.textContent = '🔄 Atualizar produtos do Sheets'; btn.disabled = false; } });
         }
 
+        // Grupo de produto (por "tipo") atualmente aberto na lista — ex: "Andaime" aberto mostrando 1,0m / 1,5m / Misto
+        let _grupoProdutoAberto = null;
+        function toggleGrupoProduto(nome) {
+            _grupoProdutoAberto = (_grupoProdutoAberto === nome) ? null : nome;
+            renderProductsList();
+        }
+
         function renderProductsList() {
-            const tipo = document.getElementById('tipoLocacao') ? document.getElementById('tipoLocacao').value : '';
-            document.getElementById('productsList').innerHTML = mockProducts.map(p => {
-                const preco = precoPorTipo(p, tipo);
-                const precoTxt = preco != null
-                    ? 'R$ ' + preco.toFixed(2).replace('.', ',')
-                    : (tipo ? 'definir na hora' : 'selecione o tipo de locação acima');
+            const tipoLoc = document.getElementById('tipoLocacao') ? document.getElementById('tipoLocacao').value : '';
+            const precoTxtDe = p => {
+                const preco = precoPorTipo(p, tipoLoc);
+                const txt = preco != null ? 'R$ ' + preco.toFixed(2).replace('.', ',') : (tipoLoc ? 'definir na hora' : '—');
+                return { preco, txt };
+            };
+
+            // Produtos sem "tipo" preenchido na planilha continuam soltos na lista, um por um.
+            const semGrupo = mockProducts.filter(p => !p.tipo);
+            const cardSolto = p => {
+                const { preco, txt } = precoTxtDe(p);
+                const precoTxt = preco != null ? txt : (tipoLoc ? txt : 'selecione o tipo de locação acima');
                 return `
                 <div class="product-item">
                     <div>
@@ -1464,7 +1479,37 @@
                     </div>
                     <button class="btn btn-small" style="width:34px;height:34px;padding:0;font-size:20px;line-height:1;border-radius:8px;display:flex;align-items:center;justify-content:center;" onclick="addToCart(${p.id})">+</button>
                 </div>`;
-            }).join('');
+            };
+
+            // Produtos com "tipo" preenchido agrupam num card fechado — clica pra escolher a variante (1,0m / 1,5m / Misto...)
+            const grupos = {};
+            mockProducts.filter(p => p.tipo).forEach(p => {
+                if (!grupos[p.tipo]) grupos[p.tipo] = [];
+                grupos[p.tipo].push(p);
+            });
+            const cardGrupo = (nomeGrupo, itens) => {
+                const aberto = _grupoProdutoAberto === nomeGrupo;
+                return `
+                <div class="product-item" style="flex-direction:column;align-items:stretch;cursor:pointer;" onclick="toggleGrupoProduto('${nomeGrupo}')">
+                    <div style="display:flex;justify-content:space-between;align-items:center;width:100%;">
+                        <h3 style="font-size:13px;font-weight:600;color:var(--ink);">${nomeGrupo}</h3>
+                        <span style="font-size:11px;color:#8b95a3;">${aberto ? '▲ fechar' : '▼ ' + itens.length + ' opções'}</span>
+                    </div>
+                    ${aberto ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;" onclick="event.stopPropagation()">
+                        ${itens.map(p => {
+                            const { preco, txt } = precoTxtDe(p);
+                            return `<button class="btn btn-secondary btn-small" style="width:auto;padding:8px 14px;display:flex;flex-direction:column;align-items:flex-start;gap:2px;${preco == null ? '' : ''}" onclick="addToCart(${p.id})">
+                                <span style="font-weight:700;font-size:12px;">${p.variante || p.name}</span>
+                                <span style="font-size:11px;color:${preco == null ? '#8b95a3' : '#6b7280'};${preco == null ? 'font-style:italic;' : ''}">${txt}</span>
+                            </button>`;
+                        }).join('')}
+                    </div>` : ''}
+                </div>`;
+            };
+
+            document.getElementById('productsList').innerHTML =
+                Object.keys(grupos).map(nome => cardGrupo(nome, grupos[nome])).join('') +
+                semGrupo.map(cardSolto).join('');
         }
 
         function addToCart(pid) {
