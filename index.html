@@ -878,7 +878,21 @@
             return map[s] || '#999';
         }
         function fmt(v) { return 'R$ ' + Number(v || 0).toFixed(2).replace('.', ','); }
-        function dataBR(s) { return s ? new Date(s + 'T00:00:00').toLocaleDateString('pt-BR') : '—'; }
+        // Datas que voltam do Google Sheets às vezes vêm como timestamp completo
+        // (célula formatada como Data vira "2026-09-10T00:00:00.000Z" ao serializar) em vez
+        // de "AAAA-MM-DD". Normaliza pra sempre trabalhar só com a parte da data.
+        function normalizarDataISO(v) {
+            if (!v || typeof v !== 'string') return v;
+            const iso = v.match(/^(\d{4}-\d{2}-\d{2})/);
+            if (iso) return iso[1];
+            const br = v.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+            if (br) return `${br[3]}-${br[2]}-${br[1]}`;
+            return v;
+        }
+        function dataBR(s) {
+            const d = normalizarDataISO(s);
+            return d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
+        }
         function parseItensStr(str) {
             if (!str) return [];
             return String(str).split(';').map(s => {
@@ -908,6 +922,13 @@
             if (o) orders = JSON.parse(o);
             const orc = localStorage.getItem('scorpius_orcamentos');
             if (orc) orcamentos = JSON.parse(orc);
+            // Corrige datas que possam ter ficado salvas em formato de timestamp completo
+            // (bug de sincronização com o Sheets já corrigido, mas o cache local antigo pode ter ficado assim)
+            [orders, orcamentos].forEach(lista => lista.forEach(item => {
+                if (item.startDate) item.startDate = normalizarDataISO(item.startDate);
+                if (item.endDate) item.endDate = normalizarDataISO(item.endDate);
+                if (item.dataPedido) item.dataPedido = normalizarDataISO(item.dataPedido);
+            }));
             const p = localStorage.getItem('scorpius_produtos');
             if (p) mockProducts = JSON.parse(p);
             const u = localStorage.getItem('scorpius_users');
@@ -1985,6 +2006,9 @@
                     const merged = res.data.map(s => {
                         s.id = String(s.id);
                         s.items = s.items && s.items.length ? s.items : parseItensStr(s.itensStr);
+                        s.startDate = normalizarDataISO(s.startDate);
+                        s.endDate = normalizarDataISO(s.endDate);
+                        s.dataPedido = normalizarDataISO(s.dataPedido);
                         const local = orders.find(o => o.id === s.id);
                         return local || s;
                     });
@@ -1993,6 +2017,8 @@
                     save();
                     updateDashboard();
                     renderHistorico();
+                    renderEntregas();
+                    renderRetiras();
                 }
             }).catch(() => {});
             syncToSheets('getOrcamentos', {}).then(res => {
@@ -2000,6 +2026,9 @@
                     const merged = res.data.map(s => {
                         s.id = String(s.id);
                         s.items = s.items && s.items.length ? s.items : parseItensStr(s.itensStr);
+                        s.startDate = normalizarDataISO(s.startDate);
+                        s.endDate = normalizarDataISO(s.endDate);
+                        s.dataPedido = normalizarDataISO(s.dataPedido);
                         const local = orcamentos.find(o => o.id === s.id);
                         return local || s;
                     });
@@ -2563,8 +2592,9 @@
             const emCampo = orders.filter(o => o.status === 'retirado');
             const retiradasPorDia = {};
             emCampo.filter(o => o.endDate).forEach(o => {
-                if (!retiradasPorDia[o.endDate]) retiradasPorDia[o.endDate] = [];
-                retiradasPorDia[o.endDate].push(o);
+                const dia = normalizarDataISO(o.endDate);
+                if (!retiradasPorDia[dia]) retiradasPorDia[dia] = [];
+                retiradasPorDia[dia].push(o);
             });
             let html = '';
             for (let i = 0; i < 2; i++) {
