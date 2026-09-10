@@ -518,6 +518,14 @@
             <div class="container">
                 <!-- DASHBOARD -->
                 <div id="dashboard" class="content-section active">
+                    <!-- Filtro Equipamentos -->
+                    <div id="filtroEquipamentoBar" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">
+                        <button type="button" class="filtro-status-btn active" data-equip="todos" onclick="filtrarEquipamento('todos', this)">Todos os pedidos</button>
+                        <button type="button" class="filtro-status-btn" data-equip="andaimes" onclick="filtrarEquipamento('andaimes', this)">🏗️ Andaimes</button>
+                        <button type="button" class="filtro-status-btn" data-equip="equipamentos" onclick="filtrarEquipamento('equipamentos', this)">🔧 Betoneiras/Marteletes</button>
+                    </div>
+                    <div id="filtroEquipamentoInfo" style="font-size:11px;color:#6b7280;margin:0 0 12px;"></div>
+
                     <!-- KPIs -->
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
                         <div class="stat-card">
@@ -590,6 +598,14 @@
 
                 <!-- ENTREGAS -->
                 <div id="entregas" class="content-section">
+                    <!-- Filtro Equipamentos -->
+                    <div id="filtroEquipamentoEntregasBar" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">
+                        <button type="button" class="filtro-status-btn active" data-equip="todos" onclick="filtrarEquipamentoEntregas('todos', this)">Todos</button>
+                        <button type="button" class="filtro-status-btn" data-equip="andaimes" onclick="filtrarEquipamentoEntregas('andaimes', this)">🏗️ Andaimes</button>
+                        <button type="button" class="filtro-status-btn" data-equip="equipamentos" onclick="filtrarEquipamentoEntregas('equipamentos', this)">🔧 Betoneiras/Marteletes</button>
+                    </div>
+                    <div id="resumoEquipamentoEntregas" style="font-size:11px;color:#6b7280;margin:0 0 12px;"></div>
+
                     <div class="card" style="padding-bottom:6px;">
                         <h2>🚚 A Entregar</h2>
                         <p style="font-size:11px;color:#6b7280;margin:-4px 0 10px;">Pedidos confirmados aguardando entrega, ordenados por data mais próxima</p>
@@ -1938,16 +1954,56 @@
             _charts[id] = new Chart(canvas, config);
         }
 
+        // ===== FILTRO EQUIPAMENTOS (Betoneiras / Marteletes) =====
+        // Agrupa pedidos/itens de betoneiras e marteletes separadamente do restante do portfólio (andaimes).
+        function isEquipamentoEspecial(nome) {
+            return /betoneira|martelete/i.test(nome || '');
+        }
+        // Filtra os itens de um pedido conforme a categoria escolhida ('todos' | 'andaimes' | 'equipamentos')
+        function itemsPorFiltro(items, filtro) {
+            if (filtro === 'todos') return items || [];
+            return (items || []).filter(i => isEquipamentoEspecial(i.name) === (filtro === 'equipamentos'));
+        }
+        // Receita apenas dos itens da categoria (não o total do pedido, que pode misturar categorias + frete/desconto)
+        function valorItensPorFiltro(items, filtro) {
+            return itemsPorFiltro(items, filtro).reduce((s, i) => s + (Number(i.price) * Number(i.qty) || 0), 0);
+        }
+        // Um pedido "pertence" à categoria se tiver ao menos 1 item dela
+        function pedidoTemCategoria(o, filtro) {
+            if (filtro === 'todos') return true;
+            return (o.items || []).some(i => isEquipamentoEspecial(i.name) === (filtro === 'equipamentos'));
+        }
+
+        let filtroEquipamento = 'todos';
+        function filtrarEquipamento(valor, btn) {
+            filtroEquipamento = valor;
+            document.querySelectorAll('#filtroEquipamentoBar .filtro-status-btn').forEach(b => b.classList.remove('active'));
+            if (btn) btn.classList.add('active');
+            updateDashboard();
+        }
+
         function updateDashboard() {
             const hoje = new Date(); hoje.setHours(0,0,0,0);
-            const total = orders.length;
-            const pend  = orders.filter(o => o.status === 'a_retirar').length;
-            const venc  = orders.filter(o => {
+            const filtro = filtroEquipamento;
+            const ordersFiltrados = orders.filter(o => pedidoTemCategoria(o, filtro));
+
+            const infoTxt = {
+                todos: '',
+                andaimes: 'Mostrando apenas pedidos com itens de andaime (excluindo Betoneira/Martelete). Receita considera só o valor desses itens dentro do pedido.',
+                equipamentos: 'Mostrando apenas pedidos com Betoneira e/ou Martelete. Receita considera só o valor desses itens dentro do pedido (não o total do pedido).',
+            }[filtro];
+            document.getElementById('filtroEquipamentoInfo').textContent = infoTxt;
+
+            const total = ordersFiltrados.length;
+            const pend  = ordersFiltrados.filter(o => o.status === 'a_retirar').length;
+            const venc  = ordersFiltrados.filter(o => {
                 if (o.status === 'devolvido') return false;
                 const d = o.endDate ? new Date(o.endDate + 'T00:00:00') : null;
                 return d && d < hoje;
             }).length;
-            const receitaTotal = orders.reduce((s, o) => s + (Number(o.total) || 0), 0);
+            const receitaTotal = filtro === 'todos'
+                ? ordersFiltrados.reduce((s, o) => s + (Number(o.total) || 0), 0)
+                : ordersFiltrados.reduce((s, o) => s + valorItensPorFiltro(o.items, filtro), 0);
 
             document.getElementById('totalPedidos').textContent = total;
             document.getElementById('pendentes').textContent = pend;
@@ -1956,8 +2012,8 @@
 
             // ---- Na rua agora (status = retirado) ----
             const naRua = {};
-            orders.filter(o => o.status !== 'devolvido').forEach(o => {
-                (o.items || []).forEach(i => {
+            ordersFiltrados.filter(o => o.status !== 'devolvido').forEach(o => {
+                itemsPorFiltro(o.items, filtro).forEach(i => {
                     naRua[i.name] = (naRua[i.name] || 0) + (Number(i.qty) || 0);
                 });
             });
@@ -1976,10 +2032,13 @@
                 const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - i);
                 meses.push({ label: d.toLocaleString('pt-BR', {month:'short', year:'2-digit'}), mes: d.getMonth(), ano: d.getFullYear(), receita: 0, qtd: 0 });
             }
-            orders.forEach(o => {
+            ordersFiltrados.forEach(o => {
                 const d = new Date(o.createdAt);
                 const m = meses.find(x => x.mes === d.getMonth() && x.ano === d.getFullYear());
-                if (m) { m.receita += Number(o.total) || 0; m.qtd++; }
+                if (m) {
+                    m.receita += filtro === 'todos' ? (Number(o.total) || 0) : valorItensPorFiltro(o.items, filtro);
+                    m.qtd++;
+                }
             });
             const labels = meses.map(m => m.label);
             const palette = ['#003366','#1a5fa8','#2d7dd2','#5ea8f5','#8ec9ff','#b8deff'];
@@ -2035,8 +2094,8 @@
 
             // ---- Agregação por produto ----
             const prodQtd = {}, prodRec = {};
-            orders.forEach(o => {
-                (o.items || []).forEach(i => {
+            ordersFiltrados.forEach(o => {
+                itemsPorFiltro(o.items, filtro).forEach(i => {
                     prodQtd[i.name] = (prodQtd[i.name] || 0) + (Number(i.qty) || 0);
                     prodRec[i.name] = (prodRec[i.name] || 0) + (Number(i.price) * Number(i.qty) || 0);
                 });
@@ -2107,7 +2166,8 @@
 
         function renderPedidosVencimento() {
             const hoje = new Date(); hoje.setHours(0,0,0,0);
-            const base = filtroVencimento === 'todos' ? orders : orders.filter(o => o.status === filtroVencimento);
+            const porStatus = filtroVencimento === 'todos' ? orders : orders.filter(o => o.status === filtroVencimento);
+            const base = porStatus.filter(o => pedidoTemCategoria(o, filtroEquipamento));
             const ordenados = [...base].sort((a, b) => {
                 const da = new Date(a.endDate || a.startDate || a.createdAt);
                 const db = new Date(b.endDate || b.startDate || b.createdAt);
@@ -2317,14 +2377,32 @@
             document.getElementById('historicoList').innerHTML = html || '<div class="empty-state">Nenhum pedido ou orçamento</div>';
         }
 
+        let filtroEquipamentoEntregas = 'todos';
+        function filtrarEquipamentoEntregas(valor, btn) {
+            filtroEquipamentoEntregas = valor;
+            document.querySelectorAll('#filtroEquipamentoEntregasBar .filtro-status-btn').forEach(b => b.classList.remove('active'));
+            if (btn) btn.classList.add('active');
+            renderEntregas();
+        }
+
         function renderEntregas() {
             const hoje = new Date(); hoje.setHours(0,0,0,0);
+            const filtro = filtroEquipamentoEntregas;
             const aEntregar = [...orders]
-                .filter(o => o.status === 'a_retirar')
+                .filter(o => o.status === 'a_retirar' && pedidoTemCategoria(o, filtro))
                 .sort((a, b) => new Date(a.startDate || a.createdAt) - new Date(b.startDate || b.createdAt));
             const aRetirar = [...orders]
-                .filter(o => o.status === 'retirado')
+                .filter(o => o.status === 'retirado' && pedidoTemCategoria(o, filtro))
                 .sort((a, b) => new Date(a.endDate || a.createdAt) - new Date(b.endDate || b.createdAt));
+
+            const resumoEl = document.getElementById('resumoEquipamentoEntregas');
+            if (filtro === 'todos') {
+                resumoEl.textContent = '';
+            } else {
+                const label = filtro === 'equipamentos' ? 'Betoneira/Martelete' : 'Andaimes';
+                const valorCategoria = [...aEntregar, ...aRetirar].reduce((s, o) => s + valorItensPorFiltro(o.items, filtro), 0);
+                resumoEl.textContent = `${label}: ${aEntregar.length} a entregar, ${aRetirar.length} a retirar — valor dos itens dessa categoria: ${fmt(valorCategoria)}`;
+            }
 
             function cardEntrega(o, dateField, urgLabel) {
                 const d = o[dateField] ? new Date(o[dateField] + 'T00:00:00') : null;
