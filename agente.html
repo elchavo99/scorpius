@@ -247,6 +247,49 @@ function normISO(v){
 function dataBR(s){ const d=normISO(s); return d && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d.split('-').reverse().join('/') : '—'; }
 function dataCurta(s){ const d=normISO(s); return d && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d.slice(8)+'/'+d.slice(5,7) : '—'; }
 function fmtTel(t){ const d=digits(t); if(d.length===11) return '('+d.slice(0,2)+') '+d.slice(2,7)+'-'+d.slice(7); if(d.length===10) return '('+d.slice(0,2)+') '+d.slice(2,6)+'-'+d.slice(6); return t||''; }
+/* ---- validação de CPF / CNPJ (dígitos verificadores) ---- */
+function validaCPF(v){
+  const d=String(v||'').replace(/\D/g,'');
+  if(d.length!==11 || /^(\d)\1{10}$/.test(d)) return false;
+  for(let t=9;t<=10;t++){
+    let s=0; for(let i=0;i<t;i++) s+=+d[i]*(t+1-i);
+    if(((s*10)%11)%10 !== +d[t]) return false;
+  }
+  return true;
+}
+function validaCNPJ(v){
+  const d=String(v||'').replace(/\D/g,'');
+  if(d.length!==14 || /^(\d)\1{13}$/.test(d)) return false;
+  for(let t=12;t<=13;t++){
+    const pesos = t===12 ? [5,4,3,2,9,8,7,6,5,4,3,2] : [6,5,4,3,2,9,8,7,6,5,4,3,2];
+    let s=0; for(let i=0;i<t;i++) s+=+d[i]*pesos[i];
+    const r=s%11, dv=r<2?0:11-r;
+    if(dv !== +d[t]) return false;
+  }
+  return true;
+}
+function fmtDoc(v){
+  const d=String(v||'').replace(/\D/g,'');
+  if(d.length===11) return d.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/,'$1.$2.$3-$4');
+  if(d.length===14) return d.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/,'$1.$2.$3/$4-$5');
+  return v||'';
+}
+/* retorna {ok, msg}; vazio = ok (campo opcional) */
+function checaDoc(v){
+  const d=String(v||'').replace(/\D/g,'');
+  if(!d) return {ok:true,msg:'',vazio:true};
+  if(d.length<11) return {ok:false,msg:'Faltam dígitos ('+d.length+'/11 para CPF)',parcial:true};
+  if(d.length===11) return validaCPF(d) ? {ok:true,msg:'✓ CPF válido'} : {ok:false,msg:'✗ CPF inválido — confira os números'};
+  if(d.length<14) return {ok:false,msg:'CPF tem 11 dígitos; CNPJ tem 14 ('+d.length+' digitados)',parcial:true};
+  if(d.length===14) return validaCNPJ(d) ? {ok:true,msg:'✓ CNPJ válido'} : {ok:false,msg:'✗ CNPJ inválido — confira os números'};
+  return {ok:false,msg:'✗ Documento com dígitos demais'};
+}
+function onDocInput(el){
+  const r=checaDoc(el.value), box=$('nc-cpf-msg');
+  if(!box) return;
+  box.textContent=r.msg;
+  box.style.color = r.ok ? '#15803d' : (r.parcial ? '#6b7280' : '#b91c1c');
+}
 function fmtCEP(c){ const d=digits(c); return d.length===8 ? d.slice(0,5)+'-'+d.slice(5) : (c||''); }
 function waLink(tel,txt){
   let d=digits(tel); if(d.startsWith('0')) d=d.slice(1);
@@ -545,7 +588,8 @@ function abrirNovoCliente(onSaved){
     <div id="ncErr"></div>
     <div class="fg"><label>Nome *</label><input id="nc-nome" autocomplete="off"></div>
     <div class="fg"><label>Telefone *</label><input id="nc-tel" type="tel" inputmode="tel" placeholder="(11) 99999-9999"></div>
-    <div class="fg"><label>CPF</label><input id="nc-cpf" inputmode="numeric" placeholder="só números"></div>
+    <div class="fg"><label>CPF (ou CNPJ, se for empresa)</label><input id="nc-cpf" inputmode="numeric" placeholder="só números" oninput="onDocInput(this)">
+      <div id="nc-cpf-msg" style="font-size:12.5px;margin-top:5px;min-height:16px;font-weight:600"></div></div>
     <div class="row2"><div class="fg"><label>CEP</label><input id="nc-cep" inputmode="numeric" placeholder="00000-000" onblur="buscaCEP(this.value,'nc')"></div>
       <div class="fg"><label>Número</label><input id="nc-num"></div></div>
     <div class="fg"><label>Rua</label><input id="nc-rua"></div>
@@ -563,11 +607,13 @@ function buscaCEP(v,pre){
 }
 async function salvarCliente(){
   const g=id=>$(id).value.trim();
-  const name=g('nc-nome'), phone=g('nc-tel'), cpf=g('nc-cpf'), cep=g('nc-cep');
+  const name=g('nc-nome'), phone=g('nc-tel'), cep=g('nc-cep'); let cpf=g('nc-cpf');
   const err=m=>{ $('ncErr').innerHTML='<div class="err" style="margin:0 0 12px">⚠️ '+m+'</div>'; };
   if(!name) return err('Informe o nome.');
   if(digits(phone).length<10) return err('Telefone inválido. Use DDD + número.');
-  if(cpf && digits(cpf).length!==11) return err('CPF precisa ter 11 dígitos (ou deixe em branco).');
+  const dv=checaDoc(cpf);
+  if(!dv.ok) return err((dv.msg||'CPF inválido').replace(/^✗\s*/,'')+'. Corrija ou deixe em branco.');
+  if(cpf) cpf=fmtDoc(cpf);
   if(cep && digits(cep).length!==8) return err('CEP precisa ter 8 dígitos (ou deixe em branco).');
   const dup=clientes.find(c=>digits(c.phone)===digits(phone) || (cpf && digits(c.cpf)===digits(cpf)));
   if(dup && !confirm('Já existe "'+dup.name+'" com esse telefone/CPF. Cadastrar mesmo assim?')) return;

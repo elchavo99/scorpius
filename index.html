@@ -866,9 +866,30 @@
             const limpo = (cep || '').replace(/\D/g, '');
             return limpo.length === 8;
         }
+        // Valida CPF (11 dígitos) ou CNPJ (14 dígitos) pelos dígitos verificadores
         function validarCPF(cpf) {
-            const limpo = (cpf || '').replace(/\D/g, '');
-            return limpo.length === 11;
+            const d = (cpf || '').replace(/\D/g, '');
+            if (d.length === 11) {
+                if (/^(\d)\1{10}$/.test(d)) return false;
+                for (let t = 9; t <= 10; t++) {
+                    let s = 0;
+                    for (let i = 0; i < t; i++) s += +d[i] * (t + 1 - i);
+                    if (((s * 10) % 11) % 10 !== +d[t]) return false;
+                }
+                return true;
+            }
+            if (d.length === 14) {
+                if (/^(\d)\1{13}$/.test(d)) return false;
+                for (let t = 12; t <= 13; t++) {
+                    const pesos = t === 12 ? [5,4,3,2,9,8,7,6,5,4,3,2] : [6,5,4,3,2,9,8,7,6,5,4,3,2];
+                    let s = 0;
+                    for (let i = 0; i < t; i++) s += +d[i] * pesos[i];
+                    const r = s % 11, dv = r < 2 ? 0 : 11 - r;
+                    if (dv !== +d[t]) return false;
+                }
+                return true;
+            }
+            return false;
         }
         function formatarCEP(cep) {
             const limpo = (cep || '').replace(/\D/g, '');
@@ -1325,7 +1346,7 @@
                 return;
             }
             if (!validarCPF(cpf)) {
-                errBox.innerHTML = '<div class="alert-error">⚠️ CPF inválido. Use exatamente 11 dígitos numéricos (ex.: 123.456.789-00).</div>';
+                errBox.innerHTML = '<div class="alert-error">⚠️ CPF/CNPJ inválido. Confira os números (ex.: 123.456.789-09 ou 11.222.333/0001-81).</div>';
                 return;
             }
             if (!validarCEP(cep)) {
