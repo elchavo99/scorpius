@@ -429,7 +429,13 @@ function mergeDocs(local,remote){
     return n;
   });
   const ids=new Set(out.map(o=>o.id));
-  local.forEach(l=>{ if(!ids.has(String(l.id))) out.push(l); });
+  /* Pedido que está só no aparelho: mantém SE ainda não subiu ao Sheets (pendente/erro/na fila).
+     Se já tinha sido enviado/baixado e sumiu da planilha, foi apagado lá → remove daqui também. */
+  local.forEach(l=>{
+    const id=String(l.id);
+    if(ids.has(id)) return;
+    if(l.sync==='pendente' || l.sync==='erro' || pend.has(id)) out.push(l);
+  });
   return out;
 }
 function mergeClientes(remote){
