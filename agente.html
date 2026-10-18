@@ -457,8 +457,9 @@ function sair(){
   me=null; $('app').classList.add('hide'); $('login').classList.remove('hide'); $('lp').value='';
 }
 window.addEventListener('load',()=>{
-  const s=store.get(K.sess,null);
-  if(s && s.exp>Date.now()){ const u=users.find(x=>x.id===s.id && x.name===s.name); if(u) entrar(u); }
+  /* VERSÃO DE TESTE: sem login. Entra direto como "agente".
+     Quando houver perfis de acesso, trocar por: reativar doLogin() e esconder #login só após autenticar. */
+  entrar({id:'agente',name:'Agente',isAdmin:false});
 });
 
 /* =====================================================================
@@ -657,7 +658,7 @@ function viewPerfil(){
       <div style="margin-top:12px"><button class="btn sm" onclick="syncAgora(true)">🔄 Atualizar agora</button></div></div>
     <div class="card" style="margin:0 0 12px"><h4>Mais</h4>
       <a class="btn ghost sm" href="index.html" style="text-decoration:none">Abrir o sistema completo</a></div>
-    <button class="btn ghost" style="color:var(--bad);border-color:#f3b8b8" onclick="sair()">Sair</button>
+
     <p class="muted" style="text-align:center;margin-top:16px">Scorpius Agente · versão simples</p></div>`;
 }
 

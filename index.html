@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Scorpius - Sistema de Pedidos</title>
+    <meta name="referrer" content="origin-when-cross-origin">
     <meta name="apple-mobile-web-app-capable" content="true">
     <meta name="apple-mobile-web-app-title" content="Scorpius">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -2788,31 +2789,104 @@
         // ===== MAPA DE PEDIDOS =====
         let _leafletMap = null;
         let _leafletMarkers = [];
+        let _mapaRunId = 0;          // evita duas execuções simultâneas ao trocar de aba
+        let _geoUltima = 0;          // controle de 1 requisição/segundo no Nominatim
+        const GEO_CACHE_KEY = 'scorpius_geocode_cache_v2'; // v2: descarta falhas gravadas pela versão antiga
+        const GEO_NF_TTL = 7 * 24 * 3600 * 1000;           // "não encontrado" só vale por 7 dias
+
         function getGeocodeCache() {
-            try { return JSON.parse(localStorage.getItem('scorpius_geocode_cache') || '{}'); }
+            try { return JSON.parse(localStorage.getItem(GEO_CACHE_KEY) || '{}'); }
             catch (e) { return {}; }
         }
         function saveGeocodeCache(cache) {
-            try { localStorage.setItem('scorpius_geocode_cache', JSON.stringify(cache)); } catch (e) {}
+            try { localStorage.setItem(GEO_CACHE_KEY, JSON.stringify(cache)); } catch (e) {}
         }
         function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+        async function geoThrottle() {
+            const espera = Math.max(0, _geoUltima + 1100 - Date.now());
+            if (espera) await sleep(espera);
+            _geoUltima = Date.now();
+        }
 
-        // Geocodifica um endereço via Nominatim (OpenStreetMap), com cache em localStorage.
-        async function geocodeEndereco(chave, cache) {
-            if (cache[chave] !== undefined) return cache[chave]; // pode ser null (já tentado e não encontrado)
-            const query = encodeURIComponent(chave + ', São Paulo, Brasil');
-            try {
-                const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${query}`, {
-                    headers: { 'Accept-Language': 'pt-BR' }
-                });
-                const data = await resp.json();
-                const resultado = (data && data[0]) ? { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) } : null;
-                cache[chave] = resultado;
-                saveGeocodeCache(cache);
-                return resultado;
-            } catch (e) {
-                return null;
+        // Separa rua / número / bairro / cidade de um pedido (funciona com pedidos novos e vindos do Sheets)
+        function parseEnderecoEntrega(o) {
+            let rua = (o.rentalRua || '').trim();
+            let bairro = (o.rentalBairro || '').trim();
+            let cidade = (o.rentalCidade || '').trim();
+            if (!rua && o.rentalAddress) {
+                const partes = o.rentalAddress.split(/,| — /).map(s => s.trim()).filter(Boolean);
+                if (partes.length >= 3) { cidade = cidade || partes.pop(); bairro = bairro || partes.pop(); }
+                else if (partes.length === 2) { bairro = bairro || partes.pop(); }
+                rua = partes.join(', ');
             }
+            // número: "Rua X, 123 ..." ou "Rua X 123 ..."; o que vem depois (apto, bloco, fundos) é descartado
+            let ruaNome = rua, numero = '';
+            let m = rua.match(/^(.*?),\s*(?:n[ºo°]?\.?\s*)?(\d{1,5})\b/i);
+            if (!m) m = rua.match(/^(.*?\D)\s+(\d{1,5})(?:\s*[-,].*|\s+(?:apto|ap|casa|bloco|bl|fundos|frente|sala|loja|cj|conjunto|sobrado|lote|lt|qd|quadra)\b.*)?$/i);
+            if (m) { ruaNome = m[1].trim(); numero = m[2]; }
+            return { rua, ruaNome, numero, bairro, cidade: cidade || 'São Paulo' };
+        }
+
+        // Busca no Nominatim. Lança erro em falha de rede/limite (NÃO é "não encontrado") para não gravar falha falsa no cache.
+        async function nominatimBusca(q) {
+            await geoThrottle();
+            const url = 'https://nominatim.openstreetmap.org/search?' + new URLSearchParams({ format: 'json', limit: '1', countrycodes: 'br', q });
+            const resp = await fetch(url, { headers: { 'Accept-Language': 'pt-BR' } });
+            if (resp.status === 429) { const err = new Error('limite'); err.limite = true; throw err; }
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            const data = await resp.json();
+            if (!Array.isArray(data)) throw new Error('resposta inesperada');
+            if (!data[0]) return null;
+            const lat = parseFloat(data[0].lat), lng = parseFloat(data[0].lon);
+            // descarta resultado fora da Grande SP / Baixada (homônimo de rua em outro estado)
+            if (lat < -25.0 || lat > -22.8 || lng < -47.8 || lng > -45.5) return null;
+            return { lat, lng };
+        }
+
+        // Tenta do mais preciso ao mais aproximado: rua+número → rua → rua pelo CEP → bairro
+        async function geocodeOrder(o, cache) {
+            const e = parseEnderecoEntrega(o);
+            const cep = (o.rentalCEP || '').replace(/\D/g, '');
+            const chave = [e.rua, e.bairro, e.cidade, cep].join('|').toLowerCase();
+            const c = cache[chave];
+            if (c && c.lat !== undefined) return c;
+            if (c && c.nf && (Date.now() - c.t) < GEO_NF_TTL) return null;
+
+            const montar = (...p) => p.filter(Boolean).join(', ');
+            let pos = null, precisao = '', bairro = e.bairro, cidade = e.cidade;
+
+            if (e.ruaNome) {
+                if (e.numero) {
+                    pos = await nominatimBusca(montar(`${e.ruaNome}, ${e.numero}`, e.bairro, cidade, 'SP', 'Brasil'));
+                    if (pos) precisao = 'exata';
+                }
+                if (!pos) {
+                    pos = await nominatimBusca(montar(e.ruaNome, e.bairro, cidade, 'SP', 'Brasil'));
+                    if (pos) precisao = 'rua';
+                }
+            }
+            if (!pos && cep.length === 8) {
+                try {
+                    const r = await fetch('https://viacep.com.br/ws/' + cep + '/json/');
+                    const v = await r.json();
+                    if (v && !v.erro) {
+                        bairro = bairro || v.bairro || '';
+                        cidade = v.localidade || cidade;
+                        if (v.logradouro) {
+                            pos = await nominatimBusca(montar(v.logradouro, v.bairro, v.localidade, v.uf || 'SP', 'Brasil'));
+                            if (pos) precisao = 'rua';
+                        }
+                    }
+                } catch (err) { if (err.limite) throw err; /* ViaCEP fora do ar: segue para o bairro */ }
+            }
+            if (!pos && bairro) {
+                pos = await nominatimBusca(montar(bairro, cidade, 'SP', 'Brasil'));
+                if (pos) precisao = 'bairro';
+            }
+
+            cache[chave] = pos ? { lat: pos.lat, lng: pos.lng, p: precisao } : { nf: 1, t: Date.now() };
+            saveGeocodeCache(cache);
+            return pos ? cache[chave] : null;
         }
 
         async function renderMapa() {
@@ -2821,12 +2895,26 @@
             const semEnderecoEl = document.getElementById('mapaSemEndereco');
             if (!container) return;
 
+            if (typeof L === 'undefined') {
+                statusEl.innerHTML = '⚠️ A biblioteca do mapa (Leaflet) não carregou. Verifique a internet e recarregue a página.';
+                return;
+            }
+
+            const runId = ++_mapaRunId;
             if (!_leafletMap) {
                 _leafletMap = L.map('mapaContainer').setView([-23.7250, -46.6970], 12); // Grajaú, SP
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    maxZoom: 19,
-                    attribution: '© OpenStreetMap'
-                }).addTo(_leafletMap);
+                // O OpenStreetMap bloqueia (403) quem não envia o cabeçalho Referer; referrerPolicy garante o envio.
+                const base = {
+                    osm: L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                        maxZoom: 19, referrerPolicy: 'origin', attribution: '© OpenStreetMap'
+                    }),
+                    // plano B caso o OpenStreetMap bloqueie os blocos do mapa
+                    carto: L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+                        subdomains: 'abcd', maxZoom: 19, referrerPolicy: 'origin', attribution: '© OpenStreetMap · © CARTO'
+                    })
+                };
+                base.osm.addTo(_leafletMap);
+                L.control.layers({ 'Mapa padrão': base.osm, 'Mapa alternativo': base.carto }, null, { position: 'topright' }).addTo(_leafletMap);
             }
             setTimeout(() => _leafletMap.invalidateSize(), 100);
 
@@ -2834,12 +2922,15 @@
             _leafletMarkers = [];
 
             const abertos = orders.filter(o => o.status !== 'devolvido');
-            const comEndereco = abertos.filter(o => o.rentalAddress && o.rentalAddress.trim());
-            const semEndereco = abertos.filter(o => !o.rentalAddress || !o.rentalAddress.trim());
+            const naLoja = abertos.filter(o => /retirada na loja/i.test(o.rentalAddress || ''));
+            const candidatos = abertos.filter(o => !/retirada na loja/i.test(o.rentalAddress || ''));
+            const comEndereco = candidatos.filter(o => o.rentalAddress && o.rentalAddress.trim());
+            const semEndereco = candidatos.filter(o => !o.rentalAddress || !o.rentalAddress.trim());
 
-            semEnderecoEl.innerHTML = semEndereco.length
-                ? `<p style="font-size:12px;color:#8b95a3;">🔍 ${semEndereco.length} pedido(s) aberto(s) sem endereço cadastrado: ${semEndereco.map(o => o.id).join(', ')}</p>`
-                : '';
+            const avisos = [];
+            if (naLoja.length) avisos.push(`🏪 ${naLoja.length} pedido(s) com retirada na loja não aparecem no mapa.`);
+            if (semEndereco.length) avisos.push(`🔍 ${semEndereco.length} pedido(s) aberto(s) sem endereço cadastrado: ${semEndereco.map(o => o.id).join(', ')}`);
+            semEnderecoEl.innerHTML = avisos.map(a => `<p style="font-size:12px;color:#8b95a3;margin:3px 0;">${a}</p>`).join('');
 
             if (!comEndereco.length) {
                 statusEl.textContent = 'Nenhum pedido aberto com endereço para exibir no mapa.';
@@ -2849,17 +2940,25 @@
             const cache = getGeocodeCache();
             const hoje = new Date(); hoje.setHours(0,0,0,0);
             const bounds = [];
-            let falhas = 0;
+            const naoLocalizados = [];
+            let aproximados = 0, erroRede = false, limite = false;
 
             for (let i = 0; i < comEndereco.length; i++) {
                 const o = comEndereco[i];
                 statusEl.textContent = `Localizando endereços no mapa... (${i + 1}/${comEndereco.length})`;
-                const chave = `${o.rentalAddress}${o.rentalCEP ? ' - ' + o.rentalCEP : ''}`;
-                const jaEstavaEmCache = cache[chave] !== undefined;
-                const pos = await geocodeEndereco(chave, cache);
-                if (!jaEstavaEmCache) await sleep(1100); // respeita limite de 1 req/s do Nominatim
 
-                if (!pos) { falhas++; continue; }
+                let pos = null;
+                try {
+                    pos = await geocodeOrder(o, cache);
+                } catch (err) {
+                    if (err.limite) { limite = true; break; }
+                    erroRede = true;
+                    continue;
+                }
+                if (runId !== _mapaRunId) return; // o usuário abriu a aba de novo: esta execução é descartada
+
+                if (!pos) { naoLocalizados.push(o); continue; }
+                if (pos.p && pos.p !== 'exata') aproximados++;
 
                 let cor = '#f5b400'; // a_retirar
                 if (o.status === 'retirado') {
@@ -2869,9 +2968,10 @@
                         if (d < hoje) cor = '#dc2626'; // vencido
                     }
                 }
+                const aprox = pos.p && pos.p !== 'exata';
                 const icon = L.divIcon({
                     className: '',
-                    html: `<div style="width:18px;height:18px;border-radius:50%;background:${cor};border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4);"></div>`,
+                    html: `<div style="width:18px;height:18px;border-radius:50%;background:${cor};border:2px ${aprox ? 'dashed' : 'solid'} #fff;box-shadow:0 1px 4px rgba(0,0,0,.4);"></div>`,
                     iconSize: [18, 18], iconAnchor: [9, 9]
                 });
                 const marker = L.marker([pos.lat, pos.lng], { icon }).addTo(_leafletMap);
@@ -2881,6 +2981,7 @@
                         <b>${o.clientName}</b><br>
                         <span style="color:#6b7280;">${o.id} · ${statusLabel(o.status)}</span><br>
                         📍 ${o.rentalAddress}${o.rentalCEP ? ' · CEP ' + o.rentalCEP : ''}<br>
+                        ${aprox ? `<span style="color:#b45309;">⚠️ localização aproximada (${pos.p === 'bairro' ? 'só o bairro' : 'só a rua'})</span><br>` : ''}
                         📦 ${itens || '—'}<br>
                         📅 Devolução: ${dataBR(o.endDate)}<br>
                         <a href="#" onclick="openOrderDetail('${o.id}');return false;" style="color:#003366;font-weight:600;">Ver detalhes →</a>
@@ -2890,8 +2991,20 @@
                 bounds.push([pos.lat, pos.lng]);
             }
 
+            if (runId !== _mapaRunId) return;
             if (bounds.length) _leafletMap.fitBounds(bounds, { padding: [30, 30], maxZoom: 15 });
-            statusEl.textContent = `${bounds.length} pedido(s) localizado(s) no mapa` + (falhas ? ` · ${falhas} endereço(s) não encontrado(s)` : '') + '.';
+
+            let msg = `${bounds.length} de ${comEndereco.length} pedido(s) no mapa`;
+            if (aproximados) msg += ` · ${aproximados} com localização aproximada (marcador tracejado)`;
+            if (naoLocalizados.length) msg += ` · ${naoLocalizados.length} não localizado(s)`;
+            if (limite) msg += ' · ⚠️ o serviço de mapas pediu para esperar; abra a aba de novo em 1 minuto';
+            else if (erroRede) msg += ' · ⚠️ falha de conexão em alguns endereços; abra a aba de novo para tentar outra vez';
+            statusEl.textContent = msg + '.';
+
+            if (naoLocalizados.length) {
+                semEnderecoEl.innerHTML += `<p style="font-size:12px;color:#b45309;margin:6px 0 3px;">📍 Endereços que o mapa não encontrou (confira rua, número e CEP):</p>` +
+                    naoLocalizados.map(o => `<p style="font-size:12px;margin:2px 0;"><a href="#" onclick="openOrderDetail('${o.id}');return false;" style="color:#003366;">${o.id}</a> · ${o.clientName} · ${o.rentalAddress}</p>`).join('');
+            }
         }
 
         window.addEventListener('load', () => {
